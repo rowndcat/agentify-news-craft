@@ -18,9 +18,9 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 
   return (
     <div className={`relative ${sizeClasses[size]} ${className}`}>
-      <div className="absolute inset-0 rounded-full border-2 border-t-brand-purple border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-      <div className="absolute inset-0 rounded-full border-2 border-t-transparent border-r-brand-purple/40 border-b-transparent border-l-transparent animate-spin" style={{ animationDuration: '1.5s' }}></div>
-      <div className="absolute inset-0 rounded-full border-2 border-t-transparent border-r-transparent border-b-brand-purple/20 border-l-transparent animate-spin" style={{ animationDuration: '2s' }}></div>
+      <div className="absolute inset-0 rounded-full border-2 border-t-primary border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+      <div className="absolute inset-0 rounded-full border-2 border-t-transparent border-r-primary/40 border-b-transparent border-l-transparent animate-spin" style={{ animationDuration: '1.5s' }}></div>
+      <div className="absolute inset-0 rounded-full border-2 border-t-transparent border-r-transparent border-b-primary/20 border-l-transparent animate-spin" style={{ animationDuration: '2s' }}></div>
     </div>
   );
 };

@@ -48,65 +48,61 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
       
       const content = data.output;
       
-      // Check for news section (handling multiple possible section headers)
-      if (content.includes("### News Section") || content.includes("### **News Section**")) {
-        const newsStartIndex = Math.max(
-          content.indexOf("### News Section"), 
-          content.indexOf("### **News Section**")
-        );
+      // Check for news section - looking for "News Section" at the beginning or with ** markers
+      if (content.includes("News Section") || content.includes("**News Section")) {
+        // Find the start of news section
+        const newsStartIndex = content.indexOf("News Section");
         
-        // Find where markets section starts, or end of content
-        const marketsStartIndex = Math.max(
-          content.indexOf("### Economy & Markets Section", newsStartIndex),
-          content.indexOf("### **Economy & Markets Section**", newsStartIndex),
-          content.indexOf("---", newsStartIndex) // Sometimes sections are separated by markdown dividers
-        );
+        // Find where markets section or separator starts
+        const nextSectionStartIndex = content.indexOf("Economy & Markets Section", newsStartIndex);
+        const separatorIndex = content.indexOf("---", newsStartIndex);
         
-        // Extract news content (if we found a valid end point)
-        if (marketsStartIndex > newsStartIndex) {
-          newsContent = content.substring(newsStartIndex, marketsStartIndex).trim();
-        } else {
-          // If no markets section found, just take everything from news to the end
-          newsContent = content.substring(newsStartIndex).trim();
+        // Determine end of news section - use whichever comes first
+        let newsEndIndex = content.length;
+        if (nextSectionStartIndex > -1) {
+          newsEndIndex = nextSectionStartIndex;
+        } else if (separatorIndex > -1 && separatorIndex > newsStartIndex) {
+          newsEndIndex = separatorIndex;
+        }
+        
+        // Extract news content
+        if (newsStartIndex > -1) {
+          newsContent = content.substring(newsStartIndex, newsEndIndex).trim();
+          console.log("Extracted news content, length:", newsContent.length);
         }
       }
       
       // Check for markets section
-      if (content.includes("### Economy & Markets Section") || content.includes("### **Economy & Markets Section**")) {
-        const marketsStartIndex = Math.max(
-          content.indexOf("### Economy & Markets Section"),
-          content.indexOf("### **Economy & Markets Section**")
-        );
+      if (content.includes("Economy & Markets Section")) {
+        const marketsStartIndex = content.indexOf("Economy & Markets Section");
         
-        // Find where copilot section starts, or end of content
+        // Find where copilot section starts or end of content
+        let marketsEndIndex = content.length;
         const copilotStartIndex = Math.max(
-          content.indexOf("### Copilot", marketsStartIndex),
-          content.indexOf("### **Copilot**", marketsStartIndex),
-          content.indexOf("### AI Copilot", marketsStartIndex),
-          content.indexOf("### **AI Copilot**", marketsStartIndex),
-          content.indexOf("---", marketsStartIndex + 10) // +10 to avoid finding the same divider
+          content.indexOf("Copilot", marketsStartIndex),
+          content.indexOf("AI Copilot", marketsStartIndex)
         );
         
-        // Extract markets content (if we found a valid end point)
         if (copilotStartIndex > marketsStartIndex) {
-          marketsContent = content.substring(marketsStartIndex, copilotStartIndex).trim();
-        } else {
-          // If no copilot section found, just take everything from markets to the end
-          marketsContent = content.substring(marketsStartIndex).trim();
+          marketsEndIndex = copilotStartIndex;
         }
+        
+        // Extract markets content
+        marketsContent = content.substring(marketsStartIndex, marketsEndIndex).trim();
+        console.log("Extracted markets content, length:", marketsContent.length);
       }
       
-      // Check for copilot section (if we didn't already reach the end)
-      if (content.includes("### Copilot") || content.includes("### **Copilot**") || 
-          content.includes("### AI Copilot") || content.includes("### **AI Copilot**")) {
+      // Check for copilot section
+      if (content.includes("Copilot") || content.includes("AI Copilot")) {
         const copilotStartIndex = Math.max(
-          content.indexOf("### Copilot"),
-          content.indexOf("### **Copilot**"),
-          content.indexOf("### AI Copilot"),
-          content.indexOf("### **AI Copilot**")
+          content.indexOf("Copilot"),
+          content.indexOf("AI Copilot")
         );
         
-        copilotContent = content.substring(copilotStartIndex).trim();
+        if (copilotStartIndex > -1) {
+          copilotContent = content.substring(copilotStartIndex).trim();
+          console.log("Extracted copilot content, length:", copilotContent.length);
+        }
       }
       
       console.log("Extracted sections lengths:", { 

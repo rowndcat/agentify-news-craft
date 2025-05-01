@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,22 +29,29 @@ const formatMarkdown = (text: string): string => {
   // First, remove any headers that might be part of section titles
   // to avoid duplicate section headers in the UI
   let formattedText = text
-    .replace(/^###\s*(\*\*)?News Section(\*\*)?/i, "")
-    .replace(/^###\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
-    .replace(/^###\s*(\*\*)?Copilot(\*\*)?/i, "")
-    .replace(/^###\s*(\*\*)?AI Copilot(\*\*)?/i, "");
+    .replace(/^###?\s*(\*\*)?News Section(\*\*)?/i, "")
+    .replace(/^###?\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
+    .replace(/^###?\s*(\*\*)?Copilot(\*\*)?/i, "")
+    .replace(/^###?\s*(\*\*)?AI Copilot(\*\*)?/i, "");
   
+  // Remove asterisks from title that might appear
+  formattedText = formattedText
+    .replace(/^\*\*News Section.*?\*\*/i, "")
+    .replace(/^\*\*Economy & Markets Section.*?\*\*/i, "")
+    .replace(/^\*\*Copilot.*?\*\*/i, "")
+    .replace(/^\*\*AI Copilot.*?\*\*/i, "");
+    
   // Replace markdown headers
   formattedText = formattedText
     // Headers
-    .replace(/### (.*?)\n/g, '<h3 class="text-lg font-medium mb-2">$1</h3>')
-    .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3">$1</h2>')
-    .replace(/# (.*?)\n/g, '<h1 class="text-2xl font-medium mb-4">$1</h1>')
+    .replace(/### (.*?)\n/g, '<h3 class="text-lg font-medium mb-2 mt-4">$1</h3>')
+    .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3 mt-4">$2</h2>')
+    .replace(/# (.*?)\n/g, '<h1 class="text-2xl font-medium mb-4 mt-5">$1</h1>')
     // Bold
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     // Italic
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Bullet lists
+    // Bullet lists - handle multiple formats
     .replace(/^\- (.*?)$/gm, '<li>$1</li>')
     .replace(/^\• (.*?)$/gm, '<li>$1</li>')
     // Numbered lists
@@ -64,7 +70,17 @@ const formatMarkdown = (text: string): string => {
   
   // Fix list items by wrapping them in ul tags
   if (formattedText.includes('<li>')) {
-    formattedText = formattedText.replace(/(<li>.*?<\/li>)(?!\s*<\/ul>)/gs, '<ul class="list-disc pl-5 mb-3">$1</ul>');
+    let tempHtml = formattedText;
+    const listItemPattern = /(<li>.*?<\/li>)+/g;
+    const matches = tempHtml.match(listItemPattern);
+    
+    if (matches) {
+      matches.forEach(match => {
+        // Replace consecutive list items with a properly wrapped ul
+        tempHtml = tempHtml.replace(match, `<ul class="list-disc pl-5 mb-4 mt-2">${match}</ul>`);
+      });
+      formattedText = tempHtml;
+    }
   }
   
   // Clean up any empty paragraphs and dangling tags
@@ -182,7 +198,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </div>
           ) : hasContent ? (
             <div 
-              className="newsletter-content" 
+              className="newsletter-content font-tiempos text-gray-800" 
               dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
             />
           ) : (

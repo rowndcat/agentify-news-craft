@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -152,7 +151,7 @@ const CombinedNewsletter = () => {
   // State for document creation
   const [isCreating, setIsCreating] = useState(false);
   
-  // New state for document link
+  // State for document link
   const [documentLink, setDocumentLink] = useState<string | null>(null);
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
 
@@ -259,12 +258,16 @@ const CombinedNewsletter = () => {
       const result = await response.json();
       console.log("Document created:", result);
       
-      if (result.documentLink) {
+      if (result && result.documentLink) {
+        // Set document link and show dialog
         setDocumentLink(result.documentLink);
         setShowDocumentDialog(true);
+        toast.success("Newsletter document created successfully!");
+      } else {
+        // Handle case where link is missing
+        console.error("Document created but no link was returned:", result);
+        toast.error("Document created but link is missing. Please check your console logs.");
       }
-      
-      toast.success("Newsletter document created successfully!");
     } catch (error) {
       console.error("Error creating document:", error);
       toast.error("Failed to create newsletter document. Please try again.");
@@ -682,7 +685,7 @@ const CombinedNewsletter = () => {
           </DialogHeader>
           <div className="py-4">
             <p className="mb-4">Your newsletter document has been created successfully!</p>
-            {documentLink && (
+            {documentLink ? (
               <div className="flex flex-col gap-4">
                 <p>You can access it at:</p>
                 <a 
@@ -704,6 +707,8 @@ const CombinedNewsletter = () => {
                   Copy Link
                 </Button>
               </div>
+            ) : (
+              <p className="text-amber-600">No document link was received. Please try again or check the console for details.</p>
             )}
           </div>
           <DialogFooter>

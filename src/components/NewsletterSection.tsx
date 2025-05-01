@@ -188,7 +188,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
-        <ScrollArea className="section-content wave-animation font-tiempos h-[300px]">
+        <ScrollArea className="section-content font-tiempos h-[300px]">
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <div className="h-4 bg-muted rounded w-3/4"></div>

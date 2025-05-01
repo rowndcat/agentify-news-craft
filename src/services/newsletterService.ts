@@ -37,6 +37,44 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     const data = await response.json();
     console.log("Newsletter data received:", data);
     
+    // Check if the response has the expected structure
+    if (!data.news && !data.markets && !data.copilot) {
+      console.warn("API response doesn't contain newsletter content:", data);
+      
+      // If data.content exists (different API response format), try to parse it
+      if (data.content) {
+        try {
+          // Try to parse if it's a JSON string
+          const parsedContent = typeof data.content === 'string' ? 
+            JSON.parse(data.content) : data.content;
+          
+          return {
+            news: parsedContent.news || "",
+            markets: parsedContent.markets || "",
+            copilot: parsedContent.copilot || "",
+          };
+        } catch (parseError) {
+          console.error("Error parsing content:", parseError);
+          // If parsing fails but we have content as string, use it as news content
+          if (typeof data.content === 'string') {
+            return {
+              news: data.content,
+              markets: "",
+              copilot: "",
+            };
+          }
+        }
+      }
+      
+      // Fallback if no recognizable content format
+      toast.error("Received unexpected response format from API");
+      return {
+        news: "",
+        markets: "",
+        copilot: "",
+      };
+    }
+    
     // Return the section data from the response
     return {
       news: data.news || "",

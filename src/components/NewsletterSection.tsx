@@ -73,6 +73,9 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     }
   };
 
+  // Determine if there's actual content to display
+  const hasContent = content && content.trim().length > 0;
+
   return (
     <>
       <Card className="section-card animate-fade-in">
@@ -86,7 +89,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               onClick={copyToClipboard}
               variant="ghost"
               size="sm"
-              disabled={!content || isLoading}
+              disabled={!hasContent || isLoading}
               className="button-animation hover:bg-white/20 text-white"
               title="Copy content"
             >
@@ -117,7 +120,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               <div className="h-4 bg-muted rounded w-4/5"></div>
               <div className="h-4 bg-muted rounded w-3/5"></div>
             </div>
-          ) : content ? (
+          ) : hasContent ? (
             <div className="whitespace-pre-line">{content}</div>
           ) : (
             <div className="text-muted-foreground italic text-center py-8">

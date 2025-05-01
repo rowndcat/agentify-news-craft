@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NewsletterSectionProps {
   title: string;
@@ -187,7 +188,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
-        <div className="section-content wave-animation font-tiempos">
+        <ScrollArea className="section-content wave-animation font-tiempos h-[300px]">
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <div className="h-4 bg-muted rounded w-3/4"></div>
@@ -198,7 +199,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </div>
           ) : hasContent ? (
             <div 
-              className="newsletter-content font-tiempos text-gray-800" 
+              className="newsletter-content font-tiempos text-gray-800 pr-4" 
               dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
             />
           ) : (
@@ -207,7 +208,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               <p className="text-sm mt-2">Click the generate button above to create content.</p>
             </div>
           )}
-        </div>
+        </ScrollArea>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

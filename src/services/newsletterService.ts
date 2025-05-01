@@ -48,19 +48,41 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
       
       const content = data.output;
       
-      // Check for news section - looking for "News Section" at the beginning or with ** markers
-      if (content.includes("News Section") || content.includes("**News Section")) {
-        // Find the start of news section
-        const newsStartIndex = content.indexOf("News Section");
+      // Check for news section patterns with various formats
+      let newsExtracted = false;
+      if (content.includes("**News Section") || content.includes("News Section:") || content.includes("### News Section")) {
+        // Find the start of news section - check multiple patterns
+        let newsStartIndex = -1;
+        
+        // Check different possible news section headers
+        const newsPatterns = [
+          "**News Section",
+          "News Section:",
+          "### News Section",
+          "# News Section"
+        ];
+        
+        for (const pattern of newsPatterns) {
+          const index = content.indexOf(pattern);
+          if (index !== -1 && (newsStartIndex === -1 || index < newsStartIndex)) {
+            newsStartIndex = index;
+          }
+        }
         
         // Find where markets section or separator starts
-        const nextSectionStartIndex = content.indexOf("Economy & Markets Section", newsStartIndex);
+        const economySectionIndex = Math.max(
+          content.indexOf("Economy & Markets Section", newsStartIndex),
+          content.indexOf("### Economy & Markets Section", newsStartIndex),
+          content.indexOf("**Economy & Markets Section", newsStartIndex),
+          content.indexOf("# Economy & Markets Section", newsStartIndex)
+        );
+        
         const separatorIndex = content.indexOf("---", newsStartIndex);
         
         // Determine end of news section - use whichever comes first
         let newsEndIndex = content.length;
-        if (nextSectionStartIndex > -1) {
-          newsEndIndex = nextSectionStartIndex;
+        if (economySectionIndex > -1 && economySectionIndex > newsStartIndex) {
+          newsEndIndex = economySectionIndex;
         } else if (separatorIndex > -1 && separatorIndex > newsStartIndex) {
           newsEndIndex = separatorIndex;
         }
@@ -69,40 +91,75 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
         if (newsStartIndex > -1) {
           newsContent = content.substring(newsStartIndex, newsEndIndex).trim();
           console.log("Extracted news content, length:", newsContent.length);
+          newsExtracted = true;
+        }
+      }
+      
+      // If no news section was found with previous patterns, try another approach
+      if (!newsExtracted && content.trim().length > 0) {
+        // If no specific news section was found but we have content, 
+        // and it doesn't clearly contain other sections, use it as news
+        if (!content.includes("Economy & Markets Section") && !content.includes("Copilot")) {
+          newsContent = content.trim();
+          console.log("Using full content as news section, length:", newsContent.length);
         }
       }
       
       // Check for markets section
       if (content.includes("Economy & Markets Section")) {
-        const marketsStartIndex = content.indexOf("Economy & Markets Section");
+        // Find the start of markets section
+        const marketPatterns = [
+          "Economy & Markets Section",
+          "### Economy & Markets",
+          "**Economy & Markets",
+          "# Economy & Markets"
+        ];
+        
+        let marketsStartIndex = -1;
+        for (const pattern of marketPatterns) {
+          const index = content.indexOf(pattern);
+          if (index !== -1 && (marketsStartIndex === -1 || index < marketsStartIndex)) {
+            marketsStartIndex = index;
+          }
+        }
         
         // Find where copilot section starts or end of content
         let marketsEndIndex = content.length;
-        const copilotStartIndex = Math.max(
-          content.indexOf("Copilot", marketsStartIndex),
-          content.indexOf("AI Copilot", marketsStartIndex)
-        );
+        const copilotPatterns = ["Copilot", "AI Copilot", "### Copilot", "**Copilot", "# Copilot"];
+        let copilotStartIndex = -1;
+        
+        for (const pattern of copilotPatterns) {
+          const index = content.indexOf(pattern, marketsStartIndex);
+          if (index !== -1 && (copilotStartIndex === -1 || index < copilotStartIndex)) {
+            copilotStartIndex = index;
+          }
+        }
         
         if (copilotStartIndex > marketsStartIndex) {
           marketsEndIndex = copilotStartIndex;
         }
         
         // Extract markets content
-        marketsContent = content.substring(marketsStartIndex, marketsEndIndex).trim();
-        console.log("Extracted markets content, length:", marketsContent.length);
+        if (marketsStartIndex > -1) {
+          marketsContent = content.substring(marketsStartIndex, marketsEndIndex).trim();
+          console.log("Extracted markets content, length:", marketsContent.length);
+        }
       }
       
       // Check for copilot section
-      if (content.includes("Copilot") || content.includes("AI Copilot")) {
-        const copilotStartIndex = Math.max(
-          content.indexOf("Copilot"),
-          content.indexOf("AI Copilot")
-        );
-        
-        if (copilotStartIndex > -1) {
-          copilotContent = content.substring(copilotStartIndex).trim();
-          console.log("Extracted copilot content, length:", copilotContent.length);
+      const copilotPatterns = ["Copilot", "AI Copilot", "### Copilot", "**Copilot", "# Copilot"];
+      let copilotStartIndex = -1;
+      
+      for (const pattern of copilotPatterns) {
+        const index = content.indexOf(pattern);
+        if (index !== -1 && (copilotStartIndex === -1 || index < copilotStartIndex)) {
+          copilotStartIndex = index;
         }
+      }
+      
+      if (copilotStartIndex > -1) {
+        copilotContent = content.substring(copilotStartIndex).trim();
+        console.log("Extracted copilot content, length:", copilotContent.length);
       }
       
       console.log("Extracted sections lengths:", { 

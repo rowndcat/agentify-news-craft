@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -121,16 +122,18 @@ const CombinedNewsletter = () => {
     });
   });
 
-  // New state for chat ID
+  // State for chat ID
   const [chatId] = useState(() => {
     // Generate a random chat ID if none exists
     return localStorage.getItem('chatId') || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   });
 
-  // New states for document creation dialog
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [documentTitle, setDocumentTitle] = useState("");
+  // State for document creation
   const [isCreating, setIsCreating] = useState(false);
+  
+  // New state for document link
+  const [documentLink, setDocumentLink] = useState<string | null>(null);
+  const [showDocumentDialog, setShowDocumentDialog] = useState(false);
 
   useEffect(() => {
     // Store the chat ID in localStorage for persistence
@@ -184,18 +187,16 @@ const CombinedNewsletter = () => {
     return tempElement.textContent || tempElement.innerText || html;
   };
 
-  // New function to handle document creation
+  // Function to handle document creation
   const createDocument = async () => {
-    if (!documentTitle.trim()) {
-      toast.error("Please enter a document title");
-      return;
-    }
-
     setIsCreating(true);
     
     try {
+      // Default title based on date
+      const title = `NewsletterCraft - ${currentDate}`;
+      
       // Create a plain text version of the newsletter content
-      let textContent = `# ${documentTitle}\n\n`;
+      let textContent = `# ${title}\n\n`;
       textContent += `Date: ${currentDate}\n\n`;
       
       if (newsletter.news) {
@@ -210,7 +211,7 @@ const CombinedNewsletter = () => {
         textContent += "## COPILOT INSIGHTS\n" + stripHtml(newsletter.copilot) + "\n\n";
       }
 
-      // Send to webhook as a message, not an action
+      // Send to webhook as a message
       const response = await fetch("https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat", {
         method: 'POST',
         headers: {
@@ -219,7 +220,7 @@ const CombinedNewsletter = () => {
         body: JSON.stringify({
           message: "create newsletter document",
           chatId: chatId,
-          title: documentTitle,
+          title: title,
           content: textContent,
           date: currentDate,
           sections: {
@@ -237,9 +238,12 @@ const CombinedNewsletter = () => {
       const result = await response.json();
       console.log("Document created:", result);
       
+      if (result.documentLink) {
+        setDocumentLink(result.documentLink);
+        setShowDocumentDialog(true);
+      }
+      
       toast.success("Newsletter document created successfully!");
-      setShowCreateDialog(false);
-      setDocumentTitle("");
     } catch (error) {
       console.error("Error creating document:", error);
       toast.error("Failed to create newsletter document. Please try again.");
@@ -248,7 +252,7 @@ const CombinedNewsletter = () => {
     }
   };
 
-  // New functions to handle editing
+  // Functions for editing
   const toggleEditMode = (section: keyof NewsletterSections) => {
     setEditMode(prev => ({
       ...prev,
@@ -298,12 +302,12 @@ const CombinedNewsletter = () => {
           
           <div className="flex gap-2">
             <Button
-              onClick={() => setShowCreateDialog(true)}
+              onClick={createDocument}
               className="bg-brand-blue hover:bg-opacity-90"
-              disabled={!hasAnyContent}
+              disabled={!hasAnyContent || isCreating}
             >
               <FilePlus className="h-4 w-4 mr-2" />
-              Create Document
+              {isCreating ? "Creating..." : "Create Document"}
             </Button>
             <Button
               onClick={copyToClipboard}
@@ -494,37 +498,44 @@ const CombinedNewsletter = () => {
         </div>
       </main>
 
-      {/* Create Document Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      {/* Document Link Dialog */}
+      <Dialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Newsletter Document</DialogTitle>
+            <DialogTitle>Newsletter Document Created</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Document Title
-            </label>
-            <Input 
-              placeholder="Enter document title..." 
-              value={documentTitle} 
-              onChange={(e) => setDocumentTitle(e.target.value)}
-              className="mb-2"
-            />
+            <p className="mb-4">Your newsletter document has been created successfully!</p>
+            {documentLink && (
+              <div className="flex flex-col gap-4">
+                <p>You can access it at:</p>
+                <a 
+                  href={documentLink}
+                  target="_blank"
+                  rel="noopener noreferrer" 
+                  className="text-brand-blue hover:underline break-all"
+                >
+                  {documentLink}
+                </a>
+                <Button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(documentLink);
+                    toast.success("Link copied to clipboard!");
+                  }}
+                  className="bg-brand-blue hover:bg-opacity-90"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Link
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button 
-              variant="outline" 
-              onClick={() => setShowCreateDialog(false)}
-              disabled={isCreating}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={createDocument}
-              disabled={isCreating || !documentTitle.trim()}
+              onClick={() => setShowDocumentDialog(false)}
               className="bg-brand-blue hover:bg-opacity-90"
             >
-              {isCreating ? "Creating..." : "Create Document"}
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

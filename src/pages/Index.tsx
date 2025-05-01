@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -79,7 +78,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background px-4 pb-12">
+    <div className="min-h-screen px-4 pb-12 backdrop-blur-sm">
       <header className="container pt-8 pb-12">
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-col gap-3 items-center text-center mb-8">

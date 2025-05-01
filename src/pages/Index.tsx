@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -33,7 +34,7 @@ const Index = () => {
     
     try {
       const result = await generateNewsletter({
-        chatId: chatId,
+        "{{ $json.chatId }}": chatId,
         message: "Generate a complete newsletter with AI news, markets, and copilot sections"
       });
       
@@ -57,7 +58,7 @@ const Index = () => {
     try {
       const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
       const result = await generateNewsletter({ 
-        chatId: chatId,
+        "{{ $json.chatId }}": chatId,
         action: action,
         current_content: content,
         instructions: instructions

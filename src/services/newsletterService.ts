@@ -10,7 +10,7 @@ export interface NewsletterSections {
 }
 
 export interface NewsletterRequest {
-  chatId: string;
+  "{{ $json.chatId }}": string;
   message?: string;
   action?: 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
   current_content?: Partial<NewsletterSections>;

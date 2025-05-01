@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, Copy, Pencil, Check, FilePlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { NewsletterSections } from "@/services/newsletterService";
+import { NewsletterSections, regenerateSection } from "@/services/newsletterService";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Dialog, 
@@ -15,7 +15,6 @@ import {
   DialogTitle, 
   DialogFooter 
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 
 // Function to format markdown text to HTML (copied from NewsletterSection for consistency)
 const formatMarkdown = (text: string): string => {
@@ -120,6 +119,28 @@ const CombinedNewsletter = () => {
       month: 'long',
       day: 'numeric'
     });
+  });
+
+  // State for regeneration loading
+  const [isRegenerating, setIsRegenerating] = useState<{
+    news: boolean;
+    markets: boolean;
+    copilot: boolean;
+  }>({
+    news: false,
+    markets: false,
+    copilot: false,
+  });
+
+  // State for regenerate instructions dialog
+  const [regenerateDialog, setRegenerateDialog] = useState<{
+    isOpen: boolean;
+    section: 'news' | 'markets' | 'copilot' | null;
+    instructions: string;
+  }>({
+    isOpen: false,
+    section: null,
+    instructions: '',
   });
 
   // State for chat ID
@@ -285,6 +306,69 @@ const CombinedNewsletter = () => {
     toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section updated!`);
   };
 
+  // New function to open regenerate dialog
+  const openRegenerateDialog = (section: 'news' | 'markets' | 'copilot') => {
+    setRegenerateDialog({
+      isOpen: true,
+      section,
+      instructions: '',
+    });
+  };
+
+  // Function to handle regeneration
+  const handleRegenerate = async (instructions?: string) => {
+    const section = regenerateDialog.section;
+    
+    if (!section) return;
+    
+    setRegenerateDialog(prev => ({ ...prev, isOpen: false }));
+    
+    setIsRegenerating(prev => ({
+      ...prev,
+      [section]: true
+    }));
+    
+    try {
+      const regeneratedContent = await regenerateSection(
+        section,
+        chatId,
+        instructions
+      );
+      
+      if (regeneratedContent) {
+        // Update only the specific section
+        setNewsletter(prev => ({
+          ...prev,
+          [section]: regeneratedContent
+        }));
+        
+        // Update editable content as well
+        setEditableContent(prev => ({
+          ...prev,
+          [section]: regeneratedContent
+        }));
+        
+        // Save to session storage
+        const updatedNewsletter = {
+          ...newsletter,
+          [section]: regeneratedContent
+        };
+        
+        sessionStorage.setItem('combinedNewsletter', JSON.stringify(updatedNewsletter));
+        
+        toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated successfully!`);
+      }
+    } catch (error) {
+      console.error(`Error regenerating ${section}:`, error);
+      toast.error(`Failed to regenerate ${section}. Please try again.`);
+    } finally {
+      setIsRegenerating(prev => ({
+        ...prev,
+        [section]: false
+      }));
+    }
+  };
+
   // Check if we have any content at all
   const hasAnyContent = Boolean(newsletter.news || newsletter.markets || newsletter.copilot);
 
@@ -336,24 +420,42 @@ const CombinedNewsletter = () => {
                   <div className="mb-8">
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">AI News</h2>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => toggleEditMode('news')}
-                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
-                      >
-                        {editMode.news ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            <span>Save</span>
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="h-4 w-4" />
-                            <span>Edit</span>
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => openRegenerateDialog('news')}
+                          disabled={isRegenerating.news}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {isRegenerating.news ? (
+                            <span>Regenerating...</span>
+                          ) : (
+                            <>
+                              <ArrowRight className="h-4 w-4 rotate-180" />
+                              <span>Regenerate</span>
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => toggleEditMode('news')}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {editMode.news ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>Save</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pencil className="h-4 w-4" />
+                              <span>Edit</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     
                     {editMode.news ? (
@@ -387,24 +489,42 @@ const CombinedNewsletter = () => {
                   <div className="mb-8">
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">Markets & Economy</h2>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => toggleEditMode('markets')}
-                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
-                      >
-                        {editMode.markets ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            <span>Save</span>
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="h-4 w-4" />
-                            <span>Edit</span>
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => openRegenerateDialog('markets')}
+                          disabled={isRegenerating.markets}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {isRegenerating.markets ? (
+                            <span>Regenerating...</span>
+                          ) : (
+                            <>
+                              <ArrowRight className="h-4 w-4 rotate-180" />
+                              <span>Regenerate</span>
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => toggleEditMode('markets')}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {editMode.markets ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>Save</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pencil className="h-4 w-4" />
+                              <span>Edit</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     
                     {editMode.markets ? (
@@ -438,24 +558,42 @@ const CombinedNewsletter = () => {
                   <div className="mb-8">
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">Copilot Insights</h2>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => toggleEditMode('copilot')}
-                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
-                      >
-                        {editMode.copilot ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            <span>Save</span>
-                          </>
-                        ) : (
-                          <>
-                            <Pencil className="h-4 w-4" />
-                            <span>Edit</span>
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => openRegenerateDialog('copilot')}
+                          disabled={isRegenerating.copilot}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {isRegenerating.copilot ? (
+                            <span>Regenerating...</span>
+                          ) : (
+                            <>
+                              <ArrowRight className="h-4 w-4 rotate-180" />
+                              <span>Regenerate</span>
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => toggleEditMode('copilot')}
+                          className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
+                        >
+                          {editMode.copilot ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>Save</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pencil className="h-4 w-4" />
+                              <span>Edit</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                     
                     {editMode.copilot ? (
@@ -497,6 +635,44 @@ const CombinedNewsletter = () => {
           </Card>
         </div>
       </main>
+
+      {/* Regenerate Dialog */}
+      <Dialog open={regenerateDialog.isOpen} onOpenChange={(open) => setRegenerateDialog(prev => ({ ...prev, isOpen: open }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Regenerate {regenerateDialog.section === 'news' ? 'AI News' : 
+                         regenerateDialog.section === 'markets' ? 'Markets & Economy' : 
+                         'Copilot Insights'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-2">
+              <Textarea
+                placeholder="Add specific instructions for regeneration (optional)"
+                value={regenerateDialog.instructions}
+                onChange={(e) => setRegenerateDialog(prev => ({ ...prev, instructions: e.target.value }))}
+                className="min-h-[120px]"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex sm:justify-between flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => handleRegenerate()}
+              className="w-full sm:w-auto"
+            >
+              Regenerate (No Instructions)
+            </Button>
+            <Button 
+              onClick={() => handleRegenerate(regenerateDialog.instructions)}
+              className="w-full sm:w-auto bg-brand-blue hover:bg-opacity-90"
+            >
+              Regenerate with Instructions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Document Link Dialog */}
       <Dialog open={showDocumentDialog} onOpenChange={setShowDocumentDialog}>

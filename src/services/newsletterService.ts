@@ -225,3 +225,95 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     throw error;
   }
 };
+
+// Function to regenerate a specific section of the newsletter
+export const regenerateSection = async (
+  section: 'news' | 'markets' | 'copilot',
+  chatId: string,
+  instructions?: string
+): Promise<string> => {
+  try {
+    console.log(`Regenerating ${section} section with${instructions ? '' : 'out'} instructions`);
+    
+    // Prepare the message based on the section and instructions
+    let message = "";
+    
+    switch(section) {
+      case 'news':
+        message = instructions 
+          ? `regenerate news section with the following instructions: ${instructions}`
+          : "create a new news section";
+        break;
+      case 'markets':
+        message = instructions 
+          ? `regenerate markets and economy section with the following instructions: ${instructions}` 
+          : "create a markets and economy section";
+        break;
+      case 'copilot':
+        message = instructions 
+          ? `regenerate copilot insights with the following instructions: ${instructions}` 
+          : "create a copilot insights section";
+        break;
+    }
+    
+    const response = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chatId,
+        message,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to regenerate ${section}: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log(`${section} regeneration data received:`, data);
+    
+    // Extract the relevant section content based on the response
+    let regeneratedContent = "";
+    
+    // Handle different response formats
+    if (data.output && typeof data.output === 'string') {
+      // Use the existing parser to extract content
+      const parsedSections = await generateNewsletter({
+        chatId,
+        message: `extract ${section} content from: ${data.output}`
+      });
+      
+      regeneratedContent = parsedSections[section] || "";
+    } else if (data[section]) {
+      // Direct section data
+      regeneratedContent = data[section];
+    } else if (data.content) {
+      // Try to extract from content property
+      try {
+        const parsedContent = typeof data.content === 'string' ? 
+          JSON.parse(data.content) : data.content;
+        
+        regeneratedContent = parsedContent[section] || "";
+      } catch (error) {
+        console.error("Error parsing content:", error);
+        if (typeof data.content === 'string') {
+          regeneratedContent = data.content;
+        }
+      }
+    }
+    
+    if (!regeneratedContent) {
+      toast.warning(`No ${section} content was returned from the API. Please try again.`);
+      return "";
+    }
+    
+    return regeneratedContent;
+  } catch (error) {
+    console.error(`Error regenerating ${section}:`, error);
+    toast.error(`Failed to regenerate ${section}. Please try again.`);
+    throw error;
+  }
+};

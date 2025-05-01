@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { generateNewsletter } from "@/services/newsletterService";
 
 interface NewsletterSectionProps {
   title: string;
@@ -132,7 +134,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   };
 
   const handleRegenerateSubmit = () => {
-    onRegenerate(instructions === "N/A" ? undefined : instructions);
+    onRegenerate(instructions);
     setIsDialogOpen(false);
     setInstructions("");
   };

@@ -68,8 +68,8 @@ export default {
           ring: 'hsl(var(--sidebar-ring))'
         },
         brand: {
-          blue: '#1EAEDB',
-          skyblue: '#33C3F0',
+          blue: '#001f47',  // Deep blue
+          skyblue: '#29adff', // Bright blue
           dark: '#221F26',
           gray: '#403E43',
         }

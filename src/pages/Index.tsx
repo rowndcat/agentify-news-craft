@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
 import { generateNewsletter, NewsletterSections } from "@/services/newsletterService";
 import { toast } from "sonner";
-import { ChevronRight, RefreshCw, Sparkles } from "lucide-react";
+import { ChevronRight, RefreshCw, Sparkles, Files } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
   // Generate a random chat ID for this session
   const [chatId] = useState(`chat_${Math.random().toString(36).substring(2, 10)}`);
   const [content, setContent] = useState<NewsletterSections>({
@@ -78,6 +80,21 @@ const Index = () => {
     }
   };
 
+  const handleCombineAll = () => {
+    // Check if at least one section has content
+    if (!content.news && !content.markets && !content.copilot) {
+      toast.error("Please generate at least one section before combining");
+      return;
+    }
+    
+    // Store the content in sessionStorage to pass to the combined page
+    sessionStorage.setItem('combinedNewsletter', JSON.stringify(content));
+    navigate('/combined');
+  };
+
+  // Check if any sections have content
+  const hasContent = content.news || content.markets || content.copilot;
+
   return (
     <div className="min-h-screen px-4 pb-12">
       <header className="container pt-8 pb-12">
@@ -91,33 +108,57 @@ const Index = () => {
             </p>
           </div>
 
-          <Card className="glass-card p-6 flex flex-col md:flex-row gap-4 items-center justify-between animate-float">
-            <div>
-              <h2 className="text-xl font-semibold mb-2 text-brand-blue">Generate Complete Newsletter</h2>
-              <p className="text-gray-600">
-                Create all three sections with a single click
-              </p>
-            </div>
-            <Button 
-              onClick={handleGenerateAll} 
-              disabled={isLoading.all}
-              className="button-animation glow min-w-[180px] bg-brand-blue hover:bg-opacity-90 text-white py-6"
-              size="lg"
-            >
-              {isLoading.all ? (
-                <div className="flex items-center gap-2">
-                  <LoadingSpinner size="sm" />
-                  <span>Generating...</span>
+          <div className="flex flex-col gap-4">
+            <Card className="glass-card p-6 flex flex-col md:flex-row gap-4 items-center justify-between animate-float">
+              <div>
+                <h2 className="text-xl font-semibold mb-2 text-brand-blue">Generate Complete Newsletter</h2>
+                <p className="text-gray-600">
+                  Create all three sections with a single click
+                </p>
+              </div>
+              <Button 
+                onClick={handleGenerateAll} 
+                disabled={isLoading.all}
+                className="button-animation glow min-w-[180px] bg-brand-blue hover:bg-opacity-90 text-white py-6"
+                size="lg"
+              >
+                {isLoading.all ? (
+                  <div className="flex items-center gap-2">
+                    <LoadingSpinner size="sm" />
+                    <span>Generating...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5" />
+                    <span>Generate All</span>
+                    <ChevronRight className="h-5 w-5" />
+                  </div>
+                )}
+              </Button>
+            </Card>
+
+            {hasContent && (
+              <Card className="glass-card p-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2 text-brand-blue">Combine All Sections</h2>
+                  <p className="text-gray-600">
+                    View and export your complete newsletter
+                  </p>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
-                  <span>Generate All</span>
-                  <ChevronRight className="h-5 w-5" />
-                </div>
-              )}
-            </Button>
-          </Card>
+                <Button 
+                  onClick={handleCombineAll}
+                  className="button-animation min-w-[180px] bg-[#44c285] hover:bg-opacity-90 text-white py-6"
+                  size="lg"
+                >
+                  <div className="flex items-center gap-2">
+                    <Files className="h-5 w-5" />
+                    <span>Combine All</span>
+                    <ChevronRight className="h-5 w-5" />
+                  </div>
+                </Button>
+              </Card>
+            )}
+          </div>
         </div>
       </header>
 

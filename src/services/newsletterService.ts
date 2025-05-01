@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
@@ -36,6 +35,16 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
 
     const data = await response.json();
     console.log("Newsletter data received:", data);
+    
+    // First, check for direct section data in the response
+    if (data.news || data.markets || data.copilot) {
+      console.log("Found direct section data in response");
+      return {
+        news: data.news || "",
+        markets: data.markets || "",
+        copilot: data.copilot || "",
+      };
+    }
     
     // Handle API response with "output" property (as seen in console logs)
     if (data.output && typeof data.output === 'string') {
@@ -168,56 +177,59 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
         copilotLength: copilotContent.length 
       });
       
-      return {
-        news: newsContent,
-        markets: marketsContent,
-        copilot: copilotContent
-      };
+      // Only return sections that have content
+      const result: Partial<NewsletterSections> = {};
+      if (newsContent) result.news = newsContent;
+      if (marketsContent) result.markets = marketsContent;
+      if (copilotContent) result.copilot = copilotContent;
+      
+      // If we have at least one section with content, return it
+      if (Object.keys(result).length > 0) {
+        return result;
+      }
     }
     
-    // Check for standard response structure
-    if (!data.news && !data.markets && !data.copilot) {
-      console.warn("API response doesn't contain newsletter content:", data);
-      
-      // If data.content exists (different API response format), try to parse it
-      if (data.content) {
-        try {
-          // Try to parse if it's a JSON string
-          const parsedContent = typeof data.content === 'string' ? 
-            JSON.parse(data.content) : data.content;
-          
+    // Check for content property which might contain the full newsletter
+    if (data.content) {
+      try {
+        // Try to parse if it's a JSON string
+        const parsedContent = typeof data.content === 'string' ? 
+          JSON.parse(data.content) : data.content;
+        
+        return {
+          news: parsedContent.news || "",
+          markets: parsedContent.markets || "",
+          copilot: parsedContent.copilot || "",
+        };
+      } catch (parseError) {
+        console.error("Error parsing content:", parseError);
+        // If parsing fails but we have content as string, use it as news content
+        if (typeof data.content === 'string') {
           return {
-            news: parsedContent.news || "",
-            markets: parsedContent.markets || "",
-            copilot: parsedContent.copilot || "",
+            news: data.content,
+            markets: "",
+            copilot: "",
           };
-        } catch (parseError) {
-          console.error("Error parsing content:", parseError);
-          // If parsing fails but we have content as string, use it as news content
-          if (typeof data.content === 'string') {
-            return {
-              news: data.content,
-              markets: "",
-              copilot: "",
-            };
-          }
         }
       }
-      
-      // Fallback if no recognizable content format
-      toast.error("Received unexpected response format from API");
+    }
+    
+    // Check for message property which might contain the content
+    if (data.message && typeof data.message === 'string') {
       return {
-        news: "",
+        news: data.message,
         markets: "",
         copilot: "",
       };
     }
     
-    // Return the section data from the response
+    // Fallback if no recognizable content format
+    console.warn("Could not extract newsletter content from response:", data);
+    toast.error("Received unexpected response format from API");
     return {
-      news: data.news || "",
-      markets: data.markets || "",
-      copilot: data.copilot || "",
+      news: "",
+      markets: "",
+      copilot: "",
     };
   } catch (error) {
     console.error("Error generating newsletter:", error);
@@ -278,39 +290,61 @@ export const regenerateSection = async (
     // Extract the relevant section content based on the response
     let regeneratedContent = "";
     
-    // Handle different response formats
+    // Check for direct section data
+    if (data[section]) {
+      return data[section];
+    }
+    
+    // Handle output format
     if (data.output && typeof data.output === 'string') {
-      // Use the existing parser to extract content
-      const parsedSections = await generateNewsletter({
+      // Use the full output as content if it doesn't seem to contain multiple sections
+      const output = data.output;
+      const hasSectionMarkers = 
+        output.includes("News Section") || 
+        output.includes("Economy & Markets") || 
+        output.includes("Copilot");
+      
+      if (!hasSectionMarkers) {
+        return output.trim();
+      }
+      
+      // Otherwise, try to extract just the requested section
+      const extractedSections = await generateNewsletter({
         chatId,
-        message: `extract ${section} content from: ${data.output}`
+        message: `extract ${section} content from: ${output}`
       });
       
-      regeneratedContent = parsedSections[section] || "";
-    } else if (data[section]) {
-      // Direct section data
-      regeneratedContent = data[section];
-    } else if (data.content) {
-      // Try to extract from content property
-      try {
-        const parsedContent = typeof data.content === 'string' ? 
-          JSON.parse(data.content) : data.content;
-        
-        regeneratedContent = parsedContent[section] || "";
-      } catch (error) {
-        console.error("Error parsing content:", error);
-        if (typeof data.content === 'string') {
-          regeneratedContent = data.content;
+      return extractedSections[section] || "";
+    }
+    
+    // Try to extract from content property
+    if (data.content) {
+      if (typeof data.content === 'string') {
+        try {
+          const parsedContent = JSON.parse(data.content);
+          if (parsedContent[section]) {
+            return parsedContent[section];
+          }
+        } catch {
+          // If not JSON, use full content if we're looking for news
+          if (section === 'news') {
+            return data.content;
+          }
         }
+      } else if (typeof data.content === 'object' && data.content[section]) {
+        return data.content[section];
       }
     }
     
-    if (!regeneratedContent) {
-      toast.warning(`No ${section} content was returned from the API. Please try again.`);
-      return "";
+    // Check message property as last resort
+    if (data.message && typeof data.message === 'string') {
+      return data.message;
     }
     
-    return regeneratedContent;
+    // If we couldn't extract content, return empty string and show warning
+    console.warn(`Could not extract ${section} content from response:`, data);
+    toast.warning(`No ${section} content was returned from the API. Please try again.`);
+    return "";
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
     toast.error(`Failed to regenerate ${section}. Please try again.`);

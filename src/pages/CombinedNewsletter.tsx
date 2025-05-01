@@ -180,7 +180,8 @@ const CombinedNewsletter = () => {
               <Files className="h-8 w-8 text-brand-blue" />
             </div>
 
-            <ScrollArea className="pr-4 max-h-[70vh]">
+            {/* Updated ScrollArea to show the entire newsletter content */}
+            <ScrollArea className="h-[60vh] pr-4">
               <div className="newsletter-full font-tiempos">
                 {/* News Section */}
                 {newsletter.news && (

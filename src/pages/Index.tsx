@@ -116,7 +116,7 @@ const Index = () => {
       <main className="container">
         <div className="max-w-4xl mx-auto flex flex-col gap-6">
           <NewsletterSection
-            title="Latest News"
+            title="AI News"
             content={content.news}
             isLoading={isLoading.news}
             onRegenerate={(instructions) => handleRegenerateSection("news", instructions)}
@@ -132,7 +132,7 @@ const Index = () => {
           />
           
           <NewsletterSection
-            title="Copilot Insights"
+            title="Copilot"
             content={content.copilot}
             isLoading={isLoading.copilot}
             onRegenerate={(instructions) => handleRegenerateSection("copilot", instructions)}

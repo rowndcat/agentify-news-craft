@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -52,11 +53,7 @@
 
   body {
     @apply text-foreground;
-    background-image: url('/lovable-uploads/d086f700-d381-43b8-ae46-00580c475eec.png');
-    background-size: cover;
-    background-attachment: fixed;
-    background-position: center;
-    background-repeat: no-repeat;
+    background-color: #F6F6F7; /* Light gray background from image */
     min-height: 100vh;
   }
 }

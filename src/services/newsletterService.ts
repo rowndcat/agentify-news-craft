@@ -41,19 +41,84 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     if (data.output && typeof data.output === 'string') {
       console.log("Processing API response with output property");
       
-      // Extract content sections from markdown format
-      const newsSection = extractSection(data.output, "News Section");
-      const marketsSection = extractSection(data.output, "Economy & Markets Section");
-      const copilotSection = extractSection(data.output, "Copilot") || 
-                            extractSection(data.output, "AI Copilot") || 
-                            ""; // Fallback if copilot section not found
+      // More robust section extraction
+      let newsContent = "";
+      let marketsContent = "";
+      let copilotContent = "";
       
-      console.log("Extracted sections:", { newsSection, marketsSection, copilotSection });
+      const content = data.output;
+      
+      // Check for news section (handling multiple possible section headers)
+      if (content.includes("### News Section") || content.includes("### **News Section**")) {
+        const newsStartIndex = Math.max(
+          content.indexOf("### News Section"), 
+          content.indexOf("### **News Section**")
+        );
+        
+        // Find where markets section starts, or end of content
+        const marketsStartIndex = Math.max(
+          content.indexOf("### Economy & Markets Section", newsStartIndex),
+          content.indexOf("### **Economy & Markets Section**", newsStartIndex),
+          content.indexOf("---", newsStartIndex) // Sometimes sections are separated by markdown dividers
+        );
+        
+        // Extract news content (if we found a valid end point)
+        if (marketsStartIndex > newsStartIndex) {
+          newsContent = content.substring(newsStartIndex, marketsStartIndex).trim();
+        } else {
+          // If no markets section found, just take everything from news to the end
+          newsContent = content.substring(newsStartIndex).trim();
+        }
+      }
+      
+      // Check for markets section
+      if (content.includes("### Economy & Markets Section") || content.includes("### **Economy & Markets Section**")) {
+        const marketsStartIndex = Math.max(
+          content.indexOf("### Economy & Markets Section"),
+          content.indexOf("### **Economy & Markets Section**")
+        );
+        
+        // Find where copilot section starts, or end of content
+        const copilotStartIndex = Math.max(
+          content.indexOf("### Copilot", marketsStartIndex),
+          content.indexOf("### **Copilot**", marketsStartIndex),
+          content.indexOf("### AI Copilot", marketsStartIndex),
+          content.indexOf("### **AI Copilot**", marketsStartIndex),
+          content.indexOf("---", marketsStartIndex + 10) // +10 to avoid finding the same divider
+        );
+        
+        // Extract markets content (if we found a valid end point)
+        if (copilotStartIndex > marketsStartIndex) {
+          marketsContent = content.substring(marketsStartIndex, copilotStartIndex).trim();
+        } else {
+          // If no copilot section found, just take everything from markets to the end
+          marketsContent = content.substring(marketsStartIndex).trim();
+        }
+      }
+      
+      // Check for copilot section (if we didn't already reach the end)
+      if (content.includes("### Copilot") || content.includes("### **Copilot**") || 
+          content.includes("### AI Copilot") || content.includes("### **AI Copilot**")) {
+        const copilotStartIndex = Math.max(
+          content.indexOf("### Copilot"),
+          content.indexOf("### **Copilot**"),
+          content.indexOf("### AI Copilot"),
+          content.indexOf("### **AI Copilot**")
+        );
+        
+        copilotContent = content.substring(copilotStartIndex).trim();
+      }
+      
+      console.log("Extracted sections lengths:", { 
+        newsLength: newsContent.length, 
+        marketsLength: marketsContent.length, 
+        copilotLength: copilotContent.length 
+      });
       
       return {
-        news: newsSection,
-        markets: marketsSection,
-        copilot: copilotSection
+        news: newsContent,
+        markets: marketsContent,
+        copilot: copilotContent
       };
     }
     
@@ -107,33 +172,3 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     throw error;
   }
 };
-
-// Helper function to extract sections from markdown response
-function extractSection(markdown: string, sectionTitle: string): string {
-  if (!markdown) return "";
-  
-  // Check for section headers with various formats
-  const patterns = [
-    new RegExp(`\\#\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#\\#|$)`), // ### Section Title
-    new RegExp(`\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#|$)`), // ## Section Title
-    new RegExp(`\\*\\*${sectionTitle}\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title**
-    new RegExp(`\\*\\*${sectionTitle}:\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title:**
-    new RegExp(`${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\*\\*|\\n\\n\\#\\#|$)`) // Section Title (no formatting)
-  ];
-  
-  for (const pattern of patterns) {
-    const match = markdown.match(pattern);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  
-  // If no specific section matches, try to find any content after the section title
-  const simpleMatch = new RegExp(`${sectionTitle}([\\s\\S]*?)$`).exec(markdown);
-  if (simpleMatch && simpleMatch[1]) {
-    return simpleMatch[1].trim();
-  }
-  
-  // If no specific section matches, return empty string
-  return "";
-}

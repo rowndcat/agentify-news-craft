@@ -27,8 +27,16 @@ interface NewsletterSectionProps {
 const formatMarkdown = (text: string): string => {
   if (!text) return "";
   
-  // Replace markdown headers
+  // First, remove any headers that might be part of section titles
+  // to avoid duplicate section headers in the UI
   let formattedText = text
+    .replace(/^###\s*(\*\*)?News Section(\*\*)?/i, "")
+    .replace(/^###\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
+    .replace(/^###\s*(\*\*)?Copilot(\*\*)?/i, "")
+    .replace(/^###\s*(\*\*)?AI Copilot(\*\*)?/i, "");
+  
+  // Replace markdown headers
+  formattedText = formattedText
     // Headers
     .replace(/### (.*?)\n/g, '<h3 class="text-lg font-medium mb-2">$1</h3>')
     .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3">$1</h2>')
@@ -37,12 +45,13 @@ const formatMarkdown = (text: string): string => {
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     // Italic
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Lists
-    .replace(/^- (.*?)$/gm, '<li>$1</li>')
+    // Bullet lists
+    .replace(/^\- (.*?)$/gm, '<li>$1</li>')
+    .replace(/^\• (.*?)$/gm, '<li>$1</li>')
     // Numbered lists
     .replace(/^\d+\. (.*?)$/gm, '<li>$1</li>')
-    // Links
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-brand-skyblue hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Links - using a neutral dark color instead of sky blue
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-brand-dark hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
     // Paragraphs (add space after)
     .replace(/\n\n/g, '</p><p class="mb-3">')
     // Line breaks
@@ -53,10 +62,18 @@ const formatMarkdown = (text: string): string => {
     formattedText = `<p class="mb-3">${formattedText}</p>`;
   }
   
+  // Fix list items by wrapping them in ul tags
+  if (formattedText.includes('<li>')) {
+    formattedText = formattedText.replace(/(<li>.*?<\/li>)(?!\s*<\/ul>)/gs, '<ul class="list-disc pl-5 mb-3">$1</ul>');
+  }
+  
   // Clean up any empty paragraphs and dangling tags
   formattedText = formattedText
     .replace(/<p><\/p>/g, '')
     .replace(/<p><br \/><\/p>/g, '');
+    
+  // Clean up any markdown dividers
+  formattedText = formattedText.replace(/---/g, '<hr class="my-4" />');
     
   return formattedText;
 };

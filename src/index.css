@@ -166,7 +166,7 @@
   }
   
   .newsletter-content a {
-    @apply text-brand-skyblue hover:underline;
+    @apply text-brand-dark hover:underline;
   }
   
   .newsletter-content ul, 

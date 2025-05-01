@@ -1,12 +1,21 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ArrowRight, Copy, Pencil, Check } from "lucide-react";
+import { ArrowRight, Copy, Pencil, Check, FilePlus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NewsletterSections } from "@/services/newsletterService";
 import { Textarea } from "@/components/ui/textarea";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 // Function to format markdown text to HTML (copied from NewsletterSection for consistency)
 const formatMarkdown = (text: string): string => {
@@ -113,6 +122,11 @@ const CombinedNewsletter = () => {
     });
   });
 
+  // New states for document creation dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
   useEffect(() => {
     const storedNewsletter = sessionStorage.getItem('combinedNewsletter');
     
@@ -158,6 +172,69 @@ const CombinedNewsletter = () => {
     const tempElement = document.createElement('div');
     tempElement.innerHTML = formatMarkdown(html);
     return tempElement.textContent || tempElement.innerText || html;
+  };
+
+  // New function to handle document creation
+  const createDocument = async () => {
+    if (!documentTitle.trim()) {
+      toast.error("Please enter a document title");
+      return;
+    }
+
+    setIsCreating(true);
+    
+    try {
+      // Create a plain text version of the newsletter content
+      let textContent = `# ${documentTitle}\n\n`;
+      textContent += `Date: ${currentDate}\n\n`;
+      
+      if (newsletter.news) {
+        textContent += "## AI NEWS\n" + stripHtml(newsletter.news) + "\n\n";
+      }
+      
+      if (newsletter.markets) {
+        textContent += "## MARKETS & ECONOMY\n" + stripHtml(newsletter.markets) + "\n\n";
+      }
+      
+      if (newsletter.copilot) {
+        textContent += "## COPILOT INSIGHTS\n" + stripHtml(newsletter.copilot) + "\n\n";
+      }
+
+      // Send to webhook
+      const response = await fetch("https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create_newsletter_document',
+          title: documentTitle,
+          content: textContent,
+          date: currentDate,
+          sections: {
+            news: newsletter.news || "",
+            markets: newsletter.markets || "",
+            copilot: newsletter.copilot || ""
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create document: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Document created:", result);
+      
+      toast.success("Newsletter document created successfully!");
+      setShowCreateDialog(false);
+      setDocumentTitle("");
+    } catch (error) {
+      console.error("Error creating document:", error);
+      toast.error("Failed to create newsletter document. Please try again.");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   // New functions to handle editing
@@ -208,14 +285,24 @@ const CombinedNewsletter = () => {
             <span>Back to Editor</span>
           </Link>
           
-          <Button
-            onClick={copyToClipboard}
-            className="bg-brand-blue hover:bg-opacity-90"
-            disabled={!hasAnyContent}
-          >
-            <Copy className="h-4 w-4 mr-2" />
-            Copy All Content
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowCreateDialog(true)}
+              className="bg-brand-blue hover:bg-opacity-90"
+              disabled={!hasAnyContent}
+            >
+              <FilePlus className="h-4 w-4 mr-2" />
+              Create Document
+            </Button>
+            <Button
+              onClick={copyToClipboard}
+              className="bg-brand-blue hover:bg-opacity-90"
+              disabled={!hasAnyContent}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy All Content
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -395,6 +482,42 @@ const CombinedNewsletter = () => {
           </Card>
         </div>
       </main>
+
+      {/* Create Document Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Newsletter Document</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Document Title
+            </label>
+            <Input 
+              placeholder="Enter document title..." 
+              value={documentTitle} 
+              onChange={(e) => setDocumentTitle(e.target.value)}
+              className="mb-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCreateDialog(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={createDocument}
+              disabled={isCreating || !documentTitle.trim()}
+              className="bg-brand-blue hover:bg-opacity-90"
+            >
+              {isCreating ? "Creating..." : "Create Document"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <footer className="container mt-16">
         <div className="max-w-4xl mx-auto text-center text-sm text-brand-blue">

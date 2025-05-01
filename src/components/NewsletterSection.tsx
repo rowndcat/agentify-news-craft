@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,10 +15,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface NewsletterSectionProps {
   title: string;
@@ -110,7 +109,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
-  const [expandedView, setExpandedView] = useState(false);
+  const [fullscreenView, setFullscreenView] = useState(false);
 
   const copyToClipboard = async () => {
     try {
@@ -169,41 +168,16 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             <h2 className="text-lg font-semibold text-white">{title}</h2>
           </div>
           <div className="flex gap-2">
-            <Popover open={expandedView} onOpenChange={setExpandedView}>
-              <PopoverTrigger asChild>
-                <Button
-                  onClick={() => setExpandedView(true)}
-                  variant="ghost"
-                  size="sm"
-                  disabled={!hasContent || isLoading}
-                  className="button-animation hover:bg-white/20 text-white"
-                  title="Expand content"
-                >
-                  <Expand size={18} />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-screen max-w-[800px] p-0" align="end">
-                <Card className="border-0 shadow-none">
-                  <div className="bg-[#001f47] p-4 text-white flex justify-between items-center">
-                    <h2 className="text-lg font-semibold">{title} - Full Content</h2>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="hover:bg-white/20"
-                      onClick={() => setExpandedView(false)}
-                    >
-                      <X size={18} />
-                    </Button>
-                  </div>
-                  <ScrollArea className="p-6 max-h-[80vh] bg-[#f5f1e9] font-tiempos">
-                    <div 
-                      className="newsletter-content pr-4" 
-                      dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
-                    />
-                  </ScrollArea>
-                </Card>
-              </PopoverContent>
-            </Popover>
+            <Button
+              onClick={() => setFullscreenView(true)}
+              variant="ghost"
+              size="sm"
+              disabled={!hasContent || isLoading}
+              className="button-animation hover:bg-white/20 text-white"
+              title="View fullscreen"
+            >
+              <Expand size={18} />
+            </Button>
             <Button
               onClick={copyToClipboard}
               variant="ghost"
@@ -253,6 +227,32 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
         </ScrollArea>
       </Card>
 
+      {/* Fullscreen content dialog */}
+      <Dialog open={fullscreenView} onOpenChange={setFullscreenView}>
+        <DialogContent className="max-w-full w-full h-screen p-0 m-0 border-none bg-[#f5f1e9]">
+          <div className="bg-[#001f47] p-4 text-white flex justify-between items-center sticky top-0 z-10">
+            <h2 className="text-xl font-semibold">{title} - Full Content</h2>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="hover:bg-white/20"
+              onClick={() => setFullscreenView(false)}
+            >
+              <X size={18} />
+            </Button>
+          </div>
+          <ScrollArea className="h-[calc(100vh-4rem)] p-6 md:p-8 lg:p-12 font-tiempos">
+            <div className="max-w-4xl mx-auto">
+              <div 
+                className="newsletter-content text-lg" 
+                dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
+              />
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Regenerate dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md glass-card">
           <DialogHeader>

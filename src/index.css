@@ -5,33 +5,33 @@
 
 @layer base {
   :root {
-    --background: 214 100% 11%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
 
-    --card: 214 95% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
 
-    --popover: 214 95% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
 
-    --primary: 199 100% 50%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 214 80% 24%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
 
-    --muted: 214 60% 20%;
-    --muted-foreground: 214 30% 70%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
 
-    --accent: 199 100% 50%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 214 60% 20%;
-    --input: 214 60% 20%;
-    --ring: 199 100% 50%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
 
     --radius: 0.5rem;
 
@@ -52,8 +52,8 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    background-image: url('/lovable-uploads/99988740-1b48-496d-8fe5-700437545ec7.png');
+    @apply text-foreground;
+    background-image: url('/lovable-uploads/d086f700-d381-43b8-ae46-00580c475eec.png');
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
@@ -64,23 +64,22 @@
 
 @layer components {
   .text-gradient {
-    @apply bg-gradient-to-r from-primary to-blue-300 inline-block text-transparent bg-clip-text;
+    @apply bg-gradient-to-r from-primary to-gray-600 inline-block text-transparent bg-clip-text;
   }
   
   .section-card {
-    @apply border border-border/50 rounded-xl overflow-hidden transition-all duration-300;
-    backdrop-filter: blur(8px);
-    background-color: rgba(13, 25, 42, 0.7);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    @apply border border-gray-300 rounded-xl overflow-hidden transition-all duration-300;
+    background-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   }
   
   .section-header {
-    @apply flex justify-between items-center p-4 border-b border-border/50;
-    background: linear-gradient(to right, rgba(14, 165, 233, 0.15), rgba(14, 165, 233, 0.05));
+    @apply flex justify-between items-center p-4 border-b border-gray-300;
+    background: linear-gradient(to right, rgba(229, 231, 235, 0.5), rgba(209, 213, 219, 0.3));
   }
   
   .section-content {
-    @apply p-6 text-card-foreground;
+    @apply p-6 text-gray-800;
   }
   
   .button-animation {
@@ -88,8 +87,8 @@
   }
 
   .glass-card {
-    @apply backdrop-blur-md border border-border/40 rounded-xl;
-    background-color: rgba(18, 35, 58, 0.7);
+    @apply backdrop-blur-md border border-gray-300 rounded-xl;
+    background-color: rgba(255, 255, 255, 0.7);
   }
 
   .glow {
@@ -140,7 +139,7 @@
 
 @layer components {
   .neo-blur {
-    @apply backdrop-blur-xl bg-black/40 border border-white/10;
+    @apply backdrop-blur-xl bg-white/70 border border-gray-200;
   }
   
   .wave-animation {
@@ -157,9 +156,9 @@
     bottom: 0;
     background: linear-gradient(
       45deg,
-      rgba(30, 174, 219, 0) 20%,
-      rgba(30, 174, 219, 0.1) 30%,
-      rgba(30, 174, 219, 0) 40%
+      rgba(107, 114, 128, 0) 20%,
+      rgba(107, 114, 128, 0.1) 30%,
+      rgba(107, 114, 128, 0) 40%
     );
     transform: translateX(-100%);
     animation: wave 3s infinite linear;

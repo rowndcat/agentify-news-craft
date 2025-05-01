@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -78,29 +79,29 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 pb-12 backdrop-blur-sm">
+    <div className="min-h-screen px-4 pb-12">
       <header className="container pt-8 pb-12">
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-col gap-3 items-center text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold text-gradient">
               NewsletterCraft
             </h1>
-            <p className="text-lg text-muted-foreground max-w-lg">
+            <p className="text-lg text-gray-700 max-w-lg">
               Create engaging newsletters in seconds with AI-powered content generation.
             </p>
           </div>
 
           <Card className="glass-card p-6 flex flex-col md:flex-row gap-4 items-center justify-between animate-float">
             <div>
-              <h2 className="text-xl font-semibold mb-2">Generate Complete Newsletter</h2>
-              <p className="text-muted-foreground">
+              <h2 className="text-xl font-semibold mb-2 text-gray-800">Generate Complete Newsletter</h2>
+              <p className="text-gray-600">
                 Create all three sections with a single click
               </p>
             </div>
             <Button 
               onClick={handleGenerateAll} 
               disabled={isLoading.all}
-              className="button-animation glow min-w-[180px] bg-primary hover:bg-primary/90 text-white py-6"
+              className="button-animation glow min-w-[180px] bg-gray-800 hover:bg-gray-700 text-white py-6"
               size="lg"
             >
               {isLoading.all ? (
@@ -149,9 +150,9 @@ const Index = () => {
       </main>
 
       <footer className="container mt-16">
-        <div className="max-w-4xl mx-auto text-center text-sm text-muted-foreground">
+        <div className="max-w-4xl mx-auto text-center text-sm text-gray-600">
           <p>© 2025 NewsletterCraft. Powered by Agentify360.</p>
-          <a href="https://www.agentify360.com" className="text-primary hover:text-primary/80 mt-1 inline-block">
+          <a href="https://www.agentify360.com" className="text-gray-800 hover:text-gray-600 mt-1 inline-block">
             www.agentify360.com
           </a>
         </div>

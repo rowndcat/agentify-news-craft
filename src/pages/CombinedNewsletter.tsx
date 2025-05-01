@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ArrowRight, Copy, Files, Edit, Check, Pencil } from "lucide-react";
+import { ArrowRight, Copy, Pencil, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NewsletterSections } from "@/services/newsletterService";
@@ -222,12 +222,9 @@ const CombinedNewsletter = () => {
       <main className="container">
         <div className="max-w-4xl mx-auto">
           <Card className="p-8 mb-8 bg-white shadow-lg">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-3xl font-bold text-brand-blue">Combined Newsletter</h1>
-                <p className="text-gray-500">{currentDate}</p>
-              </div>
-              <Files className="h-8 w-8 text-brand-blue" />
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-brand-blue">Combined Newsletter</h1>
+              <p className="text-gray-500">{currentDate}</p>
             </div>
 
             <ScrollArea className="h-[60vh] pr-4">

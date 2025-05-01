@@ -5,7 +5,6 @@ import NewsletterSection from "@/components/NewsletterSection";
 import { generateNewsletter, NewsletterSections } from "@/services/newsletterService";
 import { toast } from "sonner";
 import { ChevronRight, RefreshCw, Sparkles } from "lucide-react";
-import Announcement from "@/components/Announcement";
 import { Card } from "@/components/ui/card";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
@@ -46,14 +45,15 @@ const Index = () => {
     }
   };
 
-  const handleRegenerateSection = async (section: keyof NewsletterSections) => {
+  const handleRegenerateSection = async (section: keyof NewsletterSections, instructions?: string) => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
     
     try {
       const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
       const result = await generateNewsletter({ 
         action: action,
-        current_content: content
+        current_content: content,
+        instructions: instructions
       });
       
       if (result[section]) {
@@ -82,11 +82,6 @@ const Index = () => {
               Create engaging newsletters in seconds with AI-powered content generation.
             </p>
           </div>
-          
-          <Announcement 
-            message="Welcome to the new and improved newsletter generator! Try it now by clicking the button below."
-            type="info" 
-          />
 
           <Card className="glass-card p-6 flex flex-col md:flex-row gap-4 items-center justify-between animate-float">
             <div>
@@ -124,7 +119,7 @@ const Index = () => {
             title="Latest News"
             content={content.news}
             isLoading={isLoading.news}
-            onRegenerate={() => handleRegenerateSection("news")}
+            onRegenerate={(instructions) => handleRegenerateSection("news", instructions)}
             icon="news"
           />
           
@@ -132,7 +127,7 @@ const Index = () => {
             title="Markets & Economy"
             content={content.markets}
             isLoading={isLoading.markets}
-            onRegenerate={() => handleRegenerateSection("markets")}
+            onRegenerate={(instructions) => handleRegenerateSection("markets", instructions)}
             icon="markets"
           />
           
@@ -140,7 +135,7 @@ const Index = () => {
             title="Copilot Insights"
             content={content.copilot}
             isLoading={isLoading.copilot}
-            onRegenerate={() => handleRegenerateSection("copilot")}
+            onRegenerate={(instructions) => handleRegenerateSection("copilot", instructions)}
             icon="insights"
           />
         </div>

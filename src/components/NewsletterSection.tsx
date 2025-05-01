@@ -1,5 +1,6 @@
+
 import React, { useState } from "react";
-import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand } from "lucide-react";
+import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";

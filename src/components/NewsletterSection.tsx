@@ -63,11 +63,11 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   const renderIcon = () => {
     switch (icon) {
       case "news":
-        return <Newspaper className="h-5 w-5 text-primary" />;
+        return <Newspaper className="h-5 w-5 text-white" />;
       case "markets":
-        return <BarChart2 className="h-5 w-5 text-primary" />;
+        return <BarChart2 className="h-5 w-5 text-white" />;
       case "insights":
-        return <Lightbulb className="h-5 w-5 text-primary" />;
+        return <Lightbulb className="h-5 w-5 text-white" />;
       default:
         return null;
     }
@@ -79,7 +79,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
         <div className="section-header">
           <div className="flex items-center gap-2">
             {renderIcon()}
-            <h2 className="text-lg font-semibold">{title}</h2>
+            <h2 className="text-lg font-semibold text-white">{title}</h2>
           </div>
           <div className="flex gap-2">
             <Button
@@ -87,7 +87,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               variant="ghost"
               size="sm"
               disabled={!content || isLoading}
-              className="button-animation hover:bg-primary/20"
+              className="button-animation hover:bg-white/20 text-white"
               title="Copy content"
             >
               <Copy size={18} />
@@ -97,7 +97,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               variant="ghost"
               size="sm"
               disabled={isLoading}
-              className={`button-animation hover:bg-primary/20 ${isLoading ? 'animate-pulse-light' : ''}`}
+              className={`button-animation hover:bg-white/20 text-white ${isLoading ? 'animate-pulse-light' : ''}`}
               title="Regenerate section"
             >
               {isLoading ? (
@@ -108,7 +108,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
-        <div className="section-content wave-animation" style={{ backgroundColor: "#f5f1e9" }}>
+        <div className="section-content wave-animation">
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <div className="h-4 bg-muted rounded w-3/4"></div>

@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -9,6 +8,8 @@ import { Card } from "@/components/ui/card";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 const Index = () => {
+  // Generate a random chat ID for this session
+  const [chatId] = useState(`chat_${Math.random().toString(36).substring(2, 10)}`);
   const [content, setContent] = useState<NewsletterSections>({
     news: "",
     markets: "",
@@ -31,12 +32,17 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
     
     try {
-      const result = await generateNewsletter({ action: "generate_all" });
+      const result = await generateNewsletter({
+        chatId: chatId,
+        message: "Generate a complete newsletter with AI news, markets, and copilot sections"
+      });
+      
       setContent(prev => ({
         news: result.news || prev.news,
         markets: result.markets || prev.markets,
         copilot: result.copilot || prev.copilot,
       }));
+      
       toast.success("Newsletter generated successfully!");
     } catch (error) {
       console.error("Failed to generate newsletter:", error);
@@ -51,6 +57,7 @@ const Index = () => {
     try {
       const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
       const result = await generateNewsletter({ 
+        chatId: chatId,
         action: action,
         current_content: content,
         instructions: instructions

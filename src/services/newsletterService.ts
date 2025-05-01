@@ -10,7 +10,9 @@ export interface NewsletterSections {
 }
 
 export interface NewsletterRequest {
-  action: 'generate_all' | 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
+  chatId: string;
+  message?: string;
+  action?: 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
   current_content?: Partial<NewsletterSections>;
   instructions?: string;
 }

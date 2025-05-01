@@ -23,6 +23,44 @@ interface NewsletterSectionProps {
   icon: "news" | "markets" | "insights";
 }
 
+// Function to format markdown text to HTML
+const formatMarkdown = (text: string): string => {
+  if (!text) return "";
+  
+  // Replace markdown headers
+  let formattedText = text
+    // Headers
+    .replace(/### (.*?)\n/g, '<h3 class="text-lg font-medium mb-2">$1</h3>')
+    .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3">$1</h2>')
+    .replace(/# (.*?)\n/g, '<h1 class="text-2xl font-medium mb-4">$1</h1>')
+    // Bold
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    // Lists
+    .replace(/^- (.*?)$/gm, '<li>$1</li>')
+    // Numbered lists
+    .replace(/^\d+\. (.*?)$/gm, '<li>$1</li>')
+    // Links
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-brand-skyblue hover:underline" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Paragraphs (add space after)
+    .replace(/\n\n/g, '</p><p class="mb-3">')
+    // Line breaks
+    .replace(/\n/g, '<br />');
+  
+  // Wrap in paragraph if not already wrapped
+  if (!formattedText.startsWith('<h') && !formattedText.startsWith('<p')) {
+    formattedText = `<p class="mb-3">${formattedText}</p>`;
+  }
+  
+  // Clean up any empty paragraphs and dangling tags
+  formattedText = formattedText
+    .replace(/<p><\/p>/g, '')
+    .replace(/<p><br \/><\/p>/g, '');
+    
+  return formattedText;
+};
+
 const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   title,
   content,
@@ -35,7 +73,12 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(content);
+      // Strip HTML when copying to clipboard
+      const tempElement = document.createElement('div');
+      tempElement.innerHTML = formatMarkdown(content);
+      const textContent = tempElement.textContent || tempElement.innerText || content;
+      
+      await navigator.clipboard.writeText(textContent);
       toast.success(`${title} content copied to clipboard!`);
     } catch (error) {
       console.error("Failed to copy content:", error);
@@ -111,7 +154,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
-        <div className="section-content wave-animation">
+        <div className="section-content wave-animation font-tiempos">
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <div className="h-4 bg-muted rounded w-3/4"></div>
@@ -121,7 +164,10 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               <div className="h-4 bg-muted rounded w-3/5"></div>
             </div>
           ) : hasContent ? (
-            <div className="whitespace-pre-line">{content}</div>
+            <div 
+              className="newsletter-content" 
+              dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
+            />
           ) : (
             <div className="text-muted-foreground italic text-center py-8">
               <p>No content generated yet.</p>

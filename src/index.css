@@ -3,6 +3,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://use.typekit.net/cxk8zvj.css');
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -55,6 +57,15 @@
     @apply text-foreground;
     background-color: #F6F6F7; /* Light gray background from image */
     min-height: 100vh;
+  }
+  
+  @font-face {
+    font-family: 'Tiempos Text';
+    src: url('https://use.typekit.net/af/b8d128/00000000000000007735acd9/30/l?primer=7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191&fvd=n4&v=3') format('woff2'),
+         url('https://use.typekit.net/af/b8d128/00000000000000007735acd9/30/d?primer=7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191&fvd=n4&v=3') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
   }
 }
 
@@ -132,6 +143,39 @@
     50% {
       transform: translateY(-10px);
     }
+  }
+  
+  .font-tiempos {
+    font-family: 'Tiempos Text', Georgia, serif;
+  }
+  
+  /* Newsletter content styling */
+  .newsletter-content {
+    @apply text-gray-800;
+    line-height: 1.6;
+  }
+  
+  .newsletter-content h1, 
+  .newsletter-content h2, 
+  .newsletter-content h3 {
+    @apply font-semibold mb-3 mt-4;
+  }
+  
+  .newsletter-content p {
+    @apply mb-3;
+  }
+  
+  .newsletter-content a {
+    @apply text-brand-skyblue hover:underline;
+  }
+  
+  .newsletter-content ul, 
+  .newsletter-content ol {
+    @apply mb-3 pl-5;
+  }
+  
+  .newsletter-content li {
+    @apply mb-1;
   }
 }
 

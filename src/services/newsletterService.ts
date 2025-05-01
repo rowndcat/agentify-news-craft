@@ -48,6 +48,8 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
                             extractSection(data.output, "AI Copilot") || 
                             ""; // Fallback if copilot section not found
       
+      console.log("Extracted sections:", { newsSection, marketsSection, copilotSection });
+      
       return {
         news: newsSection,
         markets: marketsSection,
@@ -108,12 +110,14 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
 
 // Helper function to extract sections from markdown response
 function extractSection(markdown: string, sectionTitle: string): string {
+  if (!markdown) return "";
+  
   // Check for section headers with various formats
   const patterns = [
-    new RegExp(`\\*\\*${sectionTitle}\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title**
-    new RegExp(`\\*\\*${sectionTitle}:\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title:**
     new RegExp(`\\#\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#\\#|$)`), // ### Section Title
     new RegExp(`\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#|$)`), // ## Section Title
+    new RegExp(`\\*\\*${sectionTitle}\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title**
+    new RegExp(`\\*\\*${sectionTitle}:\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title:**
     new RegExp(`${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\*\\*|\\n\\n\\#\\#|$)`) // Section Title (no formatting)
   ];
   
@@ -122,6 +126,12 @@ function extractSection(markdown: string, sectionTitle: string): string {
     if (match && match[1]) {
       return match[1].trim();
     }
+  }
+  
+  // If no specific section matches, try to find any content after the section title
+  const simpleMatch = new RegExp(`${sectionTitle}([\\s\\S]*?)$`).exec(markdown);
+  if (simpleMatch && simpleMatch[1]) {
+    return simpleMatch[1].trim();
   }
   
   // If no specific section matches, return empty string

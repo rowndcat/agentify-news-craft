@@ -63,11 +63,11 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   const renderIcon = () => {
     switch (icon) {
       case "news":
-        return <Newspaper className="h-5 w-5 text-white" />;
+        return <Newspaper className="h-5 w-5 text-[#29adff]" />;
       case "markets":
-        return <BarChart2 className="h-5 w-5 text-white" />;
+        return <BarChart2 className="h-5 w-5 text-[#29adff]" />;
       case "insights":
-        return <Lightbulb className="h-5 w-5 text-white" />;
+        return <Lightbulb className="h-5 w-5 text-[#29adff]" />;
       default:
         return null;
     }

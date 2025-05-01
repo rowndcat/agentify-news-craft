@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb } from "lucide-react";
+import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -14,6 +14,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface NewsletterSectionProps {
   title: string;
@@ -104,6 +109,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
+  const [expandedView, setExpandedView] = useState(false);
 
   const copyToClipboard = async () => {
     try {
@@ -162,6 +168,41 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             <h2 className="text-lg font-semibold text-white">{title}</h2>
           </div>
           <div className="flex gap-2">
+            <Popover open={expandedView} onOpenChange={setExpandedView}>
+              <PopoverTrigger asChild>
+                <Button
+                  onClick={() => setExpandedView(true)}
+                  variant="ghost"
+                  size="sm"
+                  disabled={!hasContent || isLoading}
+                  className="button-animation hover:bg-white/20 text-white"
+                  title="Expand content"
+                >
+                  <Expand size={18} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-screen max-w-[800px] p-0" align="end">
+                <Card className="border-0 shadow-none">
+                  <div className="bg-[#001f47] p-4 text-white flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">{title} - Full Content</h2>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="hover:bg-white/20"
+                      onClick={() => setExpandedView(false)}
+                    >
+                      <X size={18} />
+                    </Button>
+                  </div>
+                  <ScrollArea className="p-6 max-h-[80vh] bg-[#f5f1e9] font-tiempos">
+                    <div 
+                      className="newsletter-content pr-4" 
+                      dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}
+                    />
+                  </ScrollArea>
+                </Card>
+              </PopoverContent>
+            </Popover>
             <Button
               onClick={copyToClipboard}
               variant="ghost"

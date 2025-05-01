@@ -37,7 +37,25 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     const data = await response.json();
     console.log("Newsletter data received:", data);
     
-    // Check if the response has the expected structure
+    // Handle API response with "output" property (as seen in console logs)
+    if (data.output && typeof data.output === 'string') {
+      console.log("Processing API response with output property");
+      
+      // Extract content sections from markdown format
+      const newsSection = extractSection(data.output, "News Section");
+      const marketsSection = extractSection(data.output, "Economy & Markets Section");
+      const copilotSection = extractSection(data.output, "Copilot") || 
+                            extractSection(data.output, "AI Copilot") || 
+                            ""; // Fallback if copilot section not found
+      
+      return {
+        news: newsSection,
+        markets: marketsSection,
+        copilot: copilotSection
+      };
+    }
+    
+    // Check for standard response structure
     if (!data.news && !data.markets && !data.copilot) {
       console.warn("API response doesn't contain newsletter content:", data);
       
@@ -87,3 +105,25 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     throw error;
   }
 };
+
+// Helper function to extract sections from markdown response
+function extractSection(markdown: string, sectionTitle: string): string {
+  // Check for section headers with various formats
+  const patterns = [
+    new RegExp(`\\*\\*${sectionTitle}\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title**
+    new RegExp(`\\*\\*${sectionTitle}:\\*\\*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`), // **Section Title:**
+    new RegExp(`\\#\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#\\#|$)`), // ### Section Title
+    new RegExp(`\\#\\# ${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\#\\#|$)`), // ## Section Title
+    new RegExp(`${sectionTitle}([\\s\\S]*?)(?=\\n\\n\\*\\*|\\n\\n\\#\\#|$)`) // Section Title (no formatting)
+  ];
+  
+  for (const pattern of patterns) {
+    const match = markdown.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  
+  // If no specific section matches, return empty string
+  return "";
+}

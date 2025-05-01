@@ -108,7 +108,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
-        <div className="section-content wave-animation">
+        <div className="section-content wave-animation" style={{ backgroundColor: "#f5f1e9" }}>
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <div className="h-4 bg-muted rounded w-3/4"></div>

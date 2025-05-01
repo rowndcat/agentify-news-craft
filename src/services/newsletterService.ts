@@ -1,7 +1,7 @@
 
 import { toast } from "sonner";
 
-const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/928b63bf-48cb-4511-a02d-bb3819fe512f";
+const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
 
 export interface NewsletterSections {
   news: string;

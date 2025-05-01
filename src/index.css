@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -52,11 +53,12 @@
 
   body {
     @apply bg-background text-foreground;
-    background-image: url('/lovable-uploads/a2e5bd54-09d3-4afa-b01f-2e6463c689de.png');
+    background-image: url('/lovable-uploads/99988740-1b48-496d-8fe5-700437545ec7.png');
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
     background-repeat: no-repeat;
+    min-height: 100vh;
   }
 }
 

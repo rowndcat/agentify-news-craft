@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -122,12 +121,23 @@ const CombinedNewsletter = () => {
     });
   });
 
+  // New state for chat ID
+  const [chatId] = useState(() => {
+    // Generate a random chat ID if none exists
+    return localStorage.getItem('chatId') || `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  });
+
   // New states for document creation dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [documentTitle, setDocumentTitle] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
+    // Store the chat ID in localStorage for persistence
+    if (!localStorage.getItem('chatId')) {
+      localStorage.setItem('chatId', chatId);
+    }
+    
     const storedNewsletter = sessionStorage.getItem('combinedNewsletter');
     
     if (storedNewsletter) {
@@ -140,7 +150,7 @@ const CombinedNewsletter = () => {
         toast.error("Failed to load newsletter content");
       }
     }
-  }, []);
+  }, [chatId]);
 
   const copyToClipboard = async () => {
     try {
@@ -200,14 +210,15 @@ const CombinedNewsletter = () => {
         textContent += "## COPILOT INSIGHTS\n" + stripHtml(newsletter.copilot) + "\n\n";
       }
 
-      // Send to webhook
+      // Send to webhook as a message, not an action
       const response = await fetch("https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'create_newsletter_document',
+          message: "create newsletter document",
+          chatId: chatId,
           title: documentTitle,
           content: textContent,
           date: currentDate,

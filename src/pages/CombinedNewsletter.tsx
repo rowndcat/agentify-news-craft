@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { ArrowRight, Copy, Files, Edit, Check } from "lucide-react";
+import { ArrowRight, Copy, Files, Edit, Check, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NewsletterSections } from "@/services/newsletterService";
@@ -239,12 +238,22 @@ const CombinedNewsletter = () => {
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">AI News</h2>
                       <Button 
-                        variant="ghost" 
+                        variant="outline" 
                         size="sm" 
                         onClick={() => toggleEditMode('news')}
-                        className="text-brand-blue hover:text-brand-skyblue"
+                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
                       >
-                        {editMode.news ? <Check className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                        {editMode.news ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>Save</span>
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-4 w-4" />
+                            <span>Edit</span>
+                          </>
+                        )}
                       </Button>
                     </div>
                     
@@ -280,12 +289,22 @@ const CombinedNewsletter = () => {
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">Markets & Economy</h2>
                       <Button 
-                        variant="ghost" 
+                        variant="outline" 
                         size="sm" 
                         onClick={() => toggleEditMode('markets')}
-                        className="text-brand-blue hover:text-brand-skyblue"
+                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
                       >
-                        {editMode.markets ? <Check className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                        {editMode.markets ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>Save</span>
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-4 w-4" />
+                            <span>Edit</span>
+                          </>
+                        )}
                       </Button>
                     </div>
                     
@@ -321,12 +340,22 @@ const CombinedNewsletter = () => {
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold mb-4 text-brand-blue border-b pb-2">Copilot Insights</h2>
                       <Button 
-                        variant="ghost" 
+                        variant="outline" 
                         size="sm" 
                         onClick={() => toggleEditMode('copilot')}
-                        className="text-brand-blue hover:text-brand-skyblue"
+                        className="flex items-center gap-2 border-brand-blue text-brand-blue hover:bg-brand-blue hover:text-white"
                       >
-                        {editMode.copilot ? <Check className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                        {editMode.copilot ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>Save</span>
+                          </>
+                        ) : (
+                          <>
+                            <Pencil className="h-4 w-4" />
+                            <span>Edit</span>
+                          </>
+                        )}
                       </Button>
                     </div>
                     

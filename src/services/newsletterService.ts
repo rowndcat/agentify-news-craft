@@ -269,13 +269,18 @@ export const regenerateSection = async (
         break;
     }
     
-    // Add explicit instructions to only generate the requested section
-    const requestBody = {
+    // Create a request body with ONLY the specific section data that needs regeneration
+    const requestBody: any = {
       chatId,
       message,
-      section_to_regenerate: section, // Add explicit parameter to indicate which section
-      regenerate_only: true // Flag to indicate only regenerating one section
+      action: `regenerate_${section}`,
+      section_to_regenerate: section,
+      regenerate_only: true
     };
+    
+    // Add current_content with ONLY the section being regenerated
+    // This way we don't send unnecessary sections to the API
+    requestBody.current_content = {};
     
     console.log(`Sending regeneration request for ${section} section only:`, requestBody);
     

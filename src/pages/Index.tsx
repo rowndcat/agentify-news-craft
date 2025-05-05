@@ -42,18 +42,20 @@ const Index = () => {
       
       console.log("Generate all result:", result);
       
-      // Directly update content with whatever sections were returned
-      setContent(prev => ({
-        news: result.news !== undefined ? result.news : prev.news,
-        markets: result.markets !== undefined ? result.markets : prev.markets,
-        copilot: result.copilot !== undefined ? result.copilot : prev.copilot,
-      }));
-      
-      // Check if any content was actually returned
-      if (result.news || result.markets || result.copilot) {
-        toast.success("Newsletter generated successfully!");
-      } else {
-        toast.warning("No content was returned. Please try again.");
+      if (result) {
+        // Make sure we're correctly updating the state with the received sections
+        setContent(prev => ({
+          news: result.news || prev.news,
+          markets: result.markets || prev.markets,
+          copilot: result.copilot || prev.copilot,
+        }));
+        
+        // Check if any content was actually returned
+        if (result.news || result.markets || result.copilot) {
+          toast.success("Newsletter generated successfully!");
+        } else {
+          toast.warning("No content was returned. Please try again.");
+        }
       }
     } catch (error) {
       console.error("Failed to generate newsletter:", error);
@@ -67,16 +69,19 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
     
     try {
-      const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
-      const result = await generateNewsletter({ 
+      // Create request payload focusing only on the specific section
+      const payload = {
         chatId: chatId,
-        action: action,
-        instructions: instructions
-      });
+        action: `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot',
+        instructions
+      };
+      
+      console.log(`Regenerating ${section} with payload:`, payload);
+      const result = await generateNewsletter(payload);
       
       console.log(`Regenerate ${section} result:`, result);
       
-      if (result[section]) {
+      if (result && result[section]) {
         setContent(prev => ({
           ...prev,
           [section]: result[section] || prev[section],

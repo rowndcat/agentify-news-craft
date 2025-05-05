@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
@@ -12,7 +13,6 @@ export interface NewsletterRequest {
   chatId: string;
   message?: string;
   action?: 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
-  current_content?: Partial<NewsletterSections>;
   instructions?: string;
 }
 
@@ -98,12 +98,33 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
   try {
     console.log(`Sending request to webhook:`, request);
     
+    // Create a specific message based on the action type
+    let messageToSend = request.message || "";
+    
+    // For regenerate actions, create targeted requests for each section
+    if (request.action) {
+      const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
+      const sectionTitle = section.charAt(0).toUpperCase() + section.slice(1);
+      
+      if (request.instructions) {
+        messageToSend = `Generate ${sectionTitle} section with these instructions: ${request.instructions}`;
+      } else {
+        messageToSend = `Generate ${sectionTitle} section`;
+      }
+    }
+    
+    // Send the request with either the original message or our constructed one
+    const payload = {
+      ...request,
+      message: messageToSend
+    };
+    
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -115,6 +136,74 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     const data = await response.json();
     console.log("Newsletter data received:", data);
     
+    // For regenerate actions, prioritize targeted section processing
+    if (request.action) {
+      const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
+      
+      // If the response includes the specific section we requested
+      if (data[section]) {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = data[section];
+        return result;
+      }
+      
+      // Check for direct output text (common response format)
+      if (data.output && typeof data.output === 'string') {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = data.output.trim();
+        return result;
+      }
+      
+      // Check for nested output
+      if (data.output && typeof data.output === 'object' && data.output[section]) {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = data.output[section];
+        return result;
+      }
+      
+      // Check content property as string
+      if (data.content && typeof data.content === 'string') {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = data.content.trim();
+        return result;
+      }
+      
+      // Check message property
+      if (data.message && typeof data.message === 'string') {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = data.message.trim();
+        return result;
+      }
+      
+      // Check any other potential string properties
+      const potentialContentProperties = ['result', 'response', 'text', 'generatedContent'];
+      for (const prop of potentialContentProperties) {
+        if (data[prop] && typeof data[prop] === 'string' && data[prop].trim()) {
+          const result: Partial<NewsletterSections> = {};
+          result[section] = data[prop].trim();
+          return result;
+        }
+      }
+      
+      // If we couldn't find any direct content, try extraction if we got a string somewhere
+      const allStringContent = Object.values(data)
+        .filter(v => typeof v === 'string')
+        .join('\n');
+      
+      if (allStringContent) {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = allStringContent.trim();
+        return result;
+      }
+      
+      // Last resort: return empty section
+      console.warn(`Could not extract content for ${section} section`);
+      const emptyResult: Partial<NewsletterSections> = {};
+      emptyResult[section] = "";
+      return emptyResult;
+    }
+    
+    // For "generate all" request, proceed with full extraction logic
     // Case 1: Direct section data in response
     if (data.news || data.markets || data.copilot) {
       console.log("Found direct section data in response");
@@ -139,18 +228,9 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
         }
         
         // If we couldn't extract any sections but have output content,
-        // try to determine what we're looking at based on the request
+        // put it in the news section by default for "generate all"
         if (data.output.trim()) {
-          if (request.action === 'regenerate_news') {
-            return { news: data.output.trim() };
-          } else if (request.action === 'regenerate_markets') {
-            return { markets: data.output.trim() };
-          } else if (request.action === 'regenerate_copilot') {
-            return { copilot: data.output.trim() };
-          } else {
-            // If generating all, put into news as fallback
-            return { news: data.output.trim() };
-          }
+          return { news: data.output.trim() };
         }
       }
       
@@ -169,8 +249,13 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     // Case 3: Check for content property
     if (data.content) {
       if (typeof data.content === 'string') {
+        const extractedSections = extractSectionsFromContent(data.content);
+        if (Object.keys(extractedSections).length > 0) {
+          return extractedSections;
+        }
+        
+        // If no sections extracted, attempt to parse as JSON
         try {
-          // Try to parse if it's a JSON string
           const parsedContent = JSON.parse(data.content);
           if (parsedContent && typeof parsedContent === 'object') {
             const result: Partial<NewsletterSections> = {};
@@ -182,40 +267,9 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
             }
           }
         } catch (parseError) {
-          // If parsing fails but we have content as string, extract sections
-          const extractedSections = extractSectionsFromContent(data.content);
-          if (Object.keys(extractedSections).length > 0) {
-            return extractedSections;
-          }
-          
-          // If no sections extracted but specific action, use accordingly
+          // If parsing fails but we have content as string, put in news for "generate all"
           if (data.content.trim()) {
-            if (request.action === 'regenerate_news') {
-              return { news: data.content.trim() };
-            } else if (request.action === 'regenerate_markets') {
-              return { markets: data.content.trim() };
-            } else if (request.action === 'regenerate_copilot') {
-              return { copilot: data.content.trim() };
-            } else {
-              // If generating all, attempt to split content
-              try {
-                // Look for section markers to determine if this is a complete newsletter
-                const containsAllSectionMarkers = 
-                  /news/i.test(data.content) && 
-                  /markets|economy/i.test(data.content) && 
-                  /copilot|insights/i.test(data.content);
-                
-                if (containsAllSectionMarkers) {
-                  return extractSectionsFromContent(data.content);
-                } else {
-                  // Default to news if we can't determine sections
-                  return { news: data.content.trim() };
-                }
-              } catch (error) {
-                console.error("Error parsing content:", error);
-                return { news: data.content.trim() };
-              }
-            }
+            return { news: data.content.trim() };
           }
         }
       } else if (typeof data.content === 'object' && data.content !== null) {
@@ -237,14 +291,8 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
         return extractedSections;
       }
       
-      // If no sections extracted, use according to request type
-      if (request.action === 'regenerate_news') {
-        return { news: data.message.trim() };
-      } else if (request.action === 'regenerate_markets') {
-        return { markets: data.message.trim() };
-      } else if (request.action === 'regenerate_copilot') {
-        return { copilot: data.message.trim() };
-      } else {
+      // If no sections extracted, use as news for "generate all"
+      if (data.message.trim()) {
         return { news: data.message.trim() };
       }
     }
@@ -258,22 +306,15 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
           return extractedSections;
         }
         
-        // If no sections but we have content, use it based on request
-        if (request.action === 'regenerate_news') {
-          return { news: data[prop].trim() };
-        } else if (request.action === 'regenerate_markets') {
-          return { markets: data[prop].trim() };
-        } else if (request.action === 'regenerate_copilot') {
-          return { copilot: data[prop].trim() };
-        } else {
-          // For generate all
+        // If no sections but we have content, use for news in "generate all"
+        if (data[prop].trim()) {
           return { news: data[prop].trim() };
         }
       }
     }
     
     // If we get to this point and have no content but received a successful response,
-    // it might be that the data structure is completely unexpected
+    // stringify the entire response as a last resort
     console.warn("Could not extract newsletter content from response:", data);
     
     // Last attempt: stringify the entire response and try to extract something

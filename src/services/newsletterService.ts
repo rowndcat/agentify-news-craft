@@ -16,9 +16,87 @@ export interface NewsletterRequest {
   instructions?: string;
 }
 
+// Helper function to extract sections from content string using multiple strategies
+const extractSectionsFromContent = (content: string): Partial<NewsletterSections> => {
+  console.log("Extracting sections from content string:", content.substring(0, 100) + "...");
+  
+  const result: Partial<NewsletterSections> = {};
+  
+  // Define patterns for each section with variations
+  const newsPatterns = [
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*News\s+Section\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*AI\s+News\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Technology\s+News\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i
+  ];
+  
+  const marketsPatterns = [
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Economy\s*&?\s*Markets\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Markets\s*&?\s*Economy\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Financial\s+Markets\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i
+  ];
+  
+  const copilotPatterns = [
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Copilot\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*AI\s+Copilot\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i,
+    /(?:^|\n)(?:#+\s*|\*\*)?\s*Insights\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i
+  ];
+  
+  // Try to extract news section
+  for (const pattern of newsPatterns) {
+    const match = content.match(pattern);
+    if (match && match[1] && match[1].trim()) {
+      result.news = match[1].trim();
+      break;
+    }
+  }
+  
+  // Try to extract markets section
+  for (const pattern of marketsPatterns) {
+    const match = content.match(pattern);
+    if (match && match[1] && match[1].trim()) {
+      result.markets = match[1].trim();
+      break;
+    }
+  }
+  
+  // Try to extract copilot section
+  for (const pattern of copilotPatterns) {
+    const match = content.match(pattern);
+    if (match && match[1] && match[1].trim()) {
+      result.copilot = match[1].trim();
+      break;
+    }
+  }
+  
+  // If we couldn't extract any sections but have content,
+  // use heuristics to determine what we have
+  if (!result.news && !result.markets && !result.copilot && content.trim()) {
+    // If it contains terms clearly related to markets, use as markets
+    if (/(stock|market|economy|financial|nasdaq|dow jones|investment)/i.test(content)) {
+      result.markets = content.trim();
+    }
+    // If it contains terms clearly related to AI, use as news
+    else if (/(AI|artificial intelligence|technology|neural|machine learning)/i.test(content)) {
+      result.news = content.trim();
+    }
+    // Otherwise, use as news by default
+    else {
+      result.news = content.trim();
+    }
+  }
+  
+  console.log("Extracted sections:", {
+    newsFound: !!result.news,
+    marketsFound: !!result.markets,
+    copilotFound: !!result.copilot
+  });
+  
+  return result;
+};
+
 export const generateNewsletter = async (request: NewsletterRequest): Promise<Partial<NewsletterSections>> => {
   try {
-    console.log(`Sending request to webhook: ${JSON.stringify(request)}`);
+    console.log(`Sending request to webhook:`, request);
     
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
@@ -30,13 +108,14 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(`API error (${response.status}):`, errorText);
       throw new Error(`Failed to generate newsletter: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     console.log("Newsletter data received:", data);
     
-    // First, check for direct section data in the response
+    // Case 1: Direct section data in response
     if (data.news || data.markets || data.copilot) {
       console.log("Found direct section data in response");
       return {
@@ -46,186 +125,172 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
       };
     }
     
-    // Handle API response with "output" property (as seen in console logs)
-    if (data.output && typeof data.output === 'string') {
+    // Case 2: API response with "output" property
+    if (data.output) {
       console.log("Processing API response with output property");
       
-      // More robust section extraction
-      let newsContent = "";
-      let marketsContent = "";
-      let copilotContent = "";
-      
-      const content = data.output;
-      
-      // Check for news section patterns with various formats
-      let newsExtracted = false;
-      if (content.includes("**News Section") || content.includes("News Section:") || content.includes("### News Section")) {
-        // Find the start of news section - check multiple patterns
-        let newsStartIndex = -1;
+      // If output is a string, try to parse sections from it
+      if (typeof data.output === 'string') {
+        const extractedSections = extractSectionsFromContent(data.output);
         
-        // Check different possible news section headers
-        const newsPatterns = [
-          "**News Section",
-          "News Section:",
-          "### News Section",
-          "# News Section"
-        ];
+        // If we have at least one section, return it
+        if (Object.keys(extractedSections).length > 0) {
+          return extractedSections;
+        }
         
-        for (const pattern of newsPatterns) {
-          const index = content.indexOf(pattern);
-          if (index !== -1 && (newsStartIndex === -1 || index < newsStartIndex)) {
-            newsStartIndex = index;
+        // If we couldn't extract any sections but have output content,
+        // try to determine what we're looking at based on the request
+        if (data.output.trim()) {
+          if (request.action === 'regenerate_news') {
+            return { news: data.output.trim() };
+          } else if (request.action === 'regenerate_markets') {
+            return { markets: data.output.trim() };
+          } else if (request.action === 'regenerate_copilot') {
+            return { copilot: data.output.trim() };
+          } else {
+            // If generating all, put into news as fallback
+            return { news: data.output.trim() };
           }
         }
-        
-        // Find where markets section or separator starts
-        const economySectionIndex = Math.max(
-          content.indexOf("Economy & Markets Section", newsStartIndex),
-          content.indexOf("### Economy & Markets Section", newsStartIndex),
-          content.indexOf("**Economy & Markets Section", newsStartIndex),
-          content.indexOf("# Economy & Markets Section", newsStartIndex)
-        );
-        
-        const separatorIndex = content.indexOf("---", newsStartIndex);
-        
-        // Determine end of news section - use whichever comes first
-        let newsEndIndex = content.length;
-        if (economySectionIndex > -1 && economySectionIndex > newsStartIndex) {
-          newsEndIndex = economySectionIndex;
-        } else if (separatorIndex > -1 && separatorIndex > newsStartIndex) {
-          newsEndIndex = separatorIndex;
-        }
-        
-        // Extract news content
-        if (newsStartIndex > -1) {
-          newsContent = content.substring(newsStartIndex, newsEndIndex).trim();
-          console.log("Extracted news content, length:", newsContent.length);
-          newsExtracted = true;
-        }
       }
       
-      // If no news section was found with previous patterns, try another approach
-      if (!newsExtracted && content.trim().length > 0) {
-        // If no specific news section was found but we have content, 
-        // and it doesn't clearly contain other sections, use it as news
-        if (!content.includes("Economy & Markets Section") && !content.includes("Copilot")) {
-          newsContent = content.trim();
-          console.log("Using full content as news section, length:", newsContent.length);
+      // If output is an object, check for nested section data
+      if (typeof data.output === 'object' && data.output !== null) {
+        const result: Partial<NewsletterSections> = {};
+        if (data.output.news) result.news = data.output.news;
+        if (data.output.markets) result.markets = data.output.markets;
+        if (data.output.copilot) result.copilot = data.output.copilot;
+        if (Object.keys(result).length > 0) {
+          return result;
         }
-      }
-      
-      // Check for markets section
-      if (content.includes("Economy & Markets Section")) {
-        // Find the start of markets section
-        const marketPatterns = [
-          "Economy & Markets Section",
-          "### Economy & Markets",
-          "**Economy & Markets",
-          "# Economy & Markets"
-        ];
-        
-        let marketsStartIndex = -1;
-        for (const pattern of marketPatterns) {
-          const index = content.indexOf(pattern);
-          if (index !== -1 && (marketsStartIndex === -1 || index < marketsStartIndex)) {
-            marketsStartIndex = index;
-          }
-        }
-        
-        // Find where copilot section starts or end of content
-        let marketsEndIndex = content.length;
-        const copilotPatterns = ["Copilot", "AI Copilot", "### Copilot", "**Copilot", "# Copilot"];
-        let copilotStartIndex = -1;
-        
-        for (const pattern of copilotPatterns) {
-          const index = content.indexOf(pattern, marketsStartIndex);
-          if (index !== -1 && (copilotStartIndex === -1 || index < copilotStartIndex)) {
-            copilotStartIndex = index;
-          }
-        }
-        
-        if (copilotStartIndex > marketsStartIndex) {
-          marketsEndIndex = copilotStartIndex;
-        }
-        
-        // Extract markets content
-        if (marketsStartIndex > -1) {
-          marketsContent = content.substring(marketsStartIndex, marketsEndIndex).trim();
-          console.log("Extracted markets content, length:", marketsContent.length);
-        }
-      }
-      
-      // Check for copilot section
-      const copilotPatterns = ["Copilot", "AI Copilot", "### Copilot", "**Copilot", "# Copilot"];
-      let copilotStartIndex = -1;
-      
-      for (const pattern of copilotPatterns) {
-        const index = content.indexOf(pattern);
-        if (index !== -1 && (copilotStartIndex === -1 || index < copilotStartIndex)) {
-          copilotStartIndex = index;
-        }
-      }
-      
-      if (copilotStartIndex > -1) {
-        copilotContent = content.substring(copilotStartIndex).trim();
-        console.log("Extracted copilot content, length:", copilotContent.length);
-      }
-      
-      console.log("Extracted sections lengths:", { 
-        newsLength: newsContent.length, 
-        marketsLength: marketsContent.length, 
-        copilotLength: copilotContent.length 
-      });
-      
-      // Only return sections that have content
-      const result: Partial<NewsletterSections> = {};
-      if (newsContent) result.news = newsContent;
-      if (marketsContent) result.markets = marketsContent;
-      if (copilotContent) result.copilot = copilotContent;
-      
-      // If we have at least one section with content, return it
-      if (Object.keys(result).length > 0) {
-        return result;
       }
     }
     
-    // Check for content property which might contain the full newsletter
+    // Case 3: Check for content property
     if (data.content) {
-      try {
-        // Try to parse if it's a JSON string
-        const parsedContent = typeof data.content === 'string' ? 
-          JSON.parse(data.content) : data.content;
-        
-        return {
-          news: parsedContent.news || "",
-          markets: parsedContent.markets || "",
-          copilot: parsedContent.copilot || "",
-        };
-      } catch (parseError) {
-        console.error("Error parsing content:", parseError);
-        // If parsing fails but we have content as string, use it as news content
-        if (typeof data.content === 'string') {
-          return {
-            news: data.content,
-            markets: "",
-            copilot: "",
-          };
+      if (typeof data.content === 'string') {
+        try {
+          // Try to parse if it's a JSON string
+          const parsedContent = JSON.parse(data.content);
+          if (parsedContent && typeof parsedContent === 'object') {
+            const result: Partial<NewsletterSections> = {};
+            if (parsedContent.news) result.news = parsedContent.news;
+            if (parsedContent.markets) result.markets = parsedContent.markets;
+            if (parsedContent.copilot) result.copilot = parsedContent.copilot;
+            if (Object.keys(result).length > 0) {
+              return result;
+            }
+          }
+        } catch (parseError) {
+          // If parsing fails but we have content as string, extract sections
+          const extractedSections = extractSectionsFromContent(data.content);
+          if (Object.keys(extractedSections).length > 0) {
+            return extractedSections;
+          }
+          
+          // If no sections extracted but specific action, use accordingly
+          if (data.content.trim()) {
+            if (request.action === 'regenerate_news') {
+              return { news: data.content.trim() };
+            } else if (request.action === 'regenerate_markets') {
+              return { markets: data.content.trim() };
+            } else if (request.action === 'regenerate_copilot') {
+              return { copilot: data.content.trim() };
+            } else {
+              // If generating all, attempt to split content
+              try {
+                // Look for section markers to determine if this is a complete newsletter
+                const containsAllSectionMarkers = 
+                  /news/i.test(data.content) && 
+                  /markets|economy/i.test(data.content) && 
+                  /copilot|insights/i.test(data.content);
+                
+                if (containsAllSectionMarkers) {
+                  return extractSectionsFromContent(data.content);
+                } else {
+                  // Default to news if we can't determine sections
+                  return { news: data.content.trim() };
+                }
+              } catch (error) {
+                console.error("Error parsing content:", error);
+                return { news: data.content.trim() };
+              }
+            }
+          }
+        }
+      } else if (typeof data.content === 'object' && data.content !== null) {
+        // Direct object with section data
+        const result: Partial<NewsletterSections> = {};
+        if (data.content.news) result.news = data.content.news;
+        if (data.content.markets) result.markets = data.content.markets;
+        if (data.content.copilot) result.copilot = data.content.copilot;
+        if (Object.keys(result).length > 0) {
+          return result;
         }
       }
     }
     
-    // Check for message property which might contain the content
+    // Case 4: Check for message property which might contain the content
     if (data.message && typeof data.message === 'string') {
-      return {
-        news: data.message,
-        markets: "",
-        copilot: "",
-      };
+      const extractedSections = extractSectionsFromContent(data.message);
+      if (Object.keys(extractedSections).length > 0) {
+        return extractedSections;
+      }
+      
+      // If no sections extracted, use according to request type
+      if (request.action === 'regenerate_news') {
+        return { news: data.message.trim() };
+      } else if (request.action === 'regenerate_markets') {
+        return { markets: data.message.trim() };
+      } else if (request.action === 'regenerate_copilot') {
+        return { copilot: data.message.trim() };
+      } else {
+        return { news: data.message.trim() };
+      }
     }
     
-    // Fallback if no recognizable content format
+    // Check for other potential properties that might contain our data
+    const potentialContentProperties = ['result', 'response', 'text', 'generatedContent'];
+    for (const prop of potentialContentProperties) {
+      if (data[prop] && typeof data[prop] === 'string' && data[prop].trim()) {
+        const extractedSections = extractSectionsFromContent(data[prop]);
+        if (Object.keys(extractedSections).length > 0) {
+          return extractedSections;
+        }
+        
+        // If no sections but we have content, use it based on request
+        if (request.action === 'regenerate_news') {
+          return { news: data[prop].trim() };
+        } else if (request.action === 'regenerate_markets') {
+          return { markets: data[prop].trim() };
+        } else if (request.action === 'regenerate_copilot') {
+          return { copilot: data[prop].trim() };
+        } else {
+          // For generate all
+          return { news: data[prop].trim() };
+        }
+      }
+    }
+    
+    // If we get to this point and have no content but received a successful response,
+    // it might be that the data structure is completely unexpected
     console.warn("Could not extract newsletter content from response:", data);
-    toast.error("Received unexpected response format from API");
+    
+    // Last attempt: stringify the entire response and try to extract something
+    const dataString = JSON.stringify(data);
+    if (dataString && dataString.length > 10) {
+      try {
+        // Look for any patterns that might indicate newsletter content
+        const contentMatch = dataString.match(/"(?:content|text|message|output)"\s*:\s*"([^"]+)"/);
+        if (contentMatch && contentMatch[1]) {
+          return { news: contentMatch[1] };
+        }
+      } catch (e) {
+        console.error("Error in final extraction attempt:", e);
+      }
+    }
+    
+    toast.error("Received response with unexpected format. Check console for details.");
     return {
       news: "",
       markets: "",
@@ -240,111 +305,25 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
 
 // Function to regenerate a specific section of the newsletter
 export const regenerateSection = async (
-  section: 'news' | 'markets' | 'copilot',
+  section: keyof NewsletterSections,
   chatId: string,
   instructions?: string
 ): Promise<string> => {
+  // This function is maintained for backward compatibility
+  // It now uses the main generateNewsletter function with appropriate action
+  
   try {
     console.log(`Regenerating ${section} section with${instructions ? '' : 'out'} instructions`);
     
-    // Prepare the message based on the section and instructions
-    let message = "";
+    const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
     
-    switch(section) {
-      case 'news':
-        message = instructions 
-          ? `regenerate news section with the following instructions: ${instructions}`
-          : "create a new news section";
-        break;
-      case 'markets':
-        message = instructions 
-          ? `regenerate markets and economy section with the following instructions: ${instructions}` 
-          : "create a markets and economy section";
-        break;
-      case 'copilot':
-        message = instructions 
-          ? `regenerate copilot insights with the following instructions: ${instructions}` 
-          : "create a copilot insights section";
-        break;
-    }
-    
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chatId,
-        message,
-      }),
+    const result = await generateNewsletter({
+      chatId,
+      action,
+      instructions
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to regenerate ${section}: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log(`${section} regeneration data received:`, data);
     
-    // Extract the relevant section content based on the response
-    let regeneratedContent = "";
-    
-    // Check for direct section data
-    if (data[section]) {
-      return data[section];
-    }
-    
-    // Handle output format
-    if (data.output && typeof data.output === 'string') {
-      // Use the full output as content if it doesn't seem to contain multiple sections
-      const output = data.output;
-      const hasSectionMarkers = 
-        output.includes("News Section") || 
-        output.includes("Economy & Markets") || 
-        output.includes("Copilot");
-      
-      if (!hasSectionMarkers) {
-        return output.trim();
-      }
-      
-      // Otherwise, try to extract just the requested section
-      const extractedSections = await generateNewsletter({
-        chatId,
-        message: `extract ${section} content from: ${output}`
-      });
-      
-      return extractedSections[section] || "";
-    }
-    
-    // Try to extract from content property
-    if (data.content) {
-      if (typeof data.content === 'string') {
-        try {
-          const parsedContent = JSON.parse(data.content);
-          if (parsedContent[section]) {
-            return parsedContent[section];
-          }
-        } catch {
-          // If not JSON, use full content if we're looking for news
-          if (section === 'news') {
-            return data.content;
-          }
-        }
-      } else if (typeof data.content === 'object' && data.content[section]) {
-        return data.content[section];
-      }
-    }
-    
-    // Check message property as last resort
-    if (data.message && typeof data.message === 'string') {
-      return data.message;
-    }
-    
-    // If we couldn't extract content, return empty string and show warning
-    console.warn(`Could not extract ${section} content from response:`, data);
-    toast.warning(`No ${section} content was returned from the API. Please try again.`);
-    return "";
+    return result[section] || "";
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
     toast.error(`Failed to regenerate ${section}. Please try again.`);

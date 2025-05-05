@@ -40,15 +40,24 @@ const Index = () => {
         message: "Generate a complete newsletter with AI news, markets, and copilot sections"
       });
       
+      console.log("Generate all result:", result);
+      
+      // Directly update content with whatever sections were returned
       setContent(prev => ({
-        news: result.news || prev.news,
-        markets: result.markets || prev.markets,
-        copilot: result.copilot || prev.copilot,
+        news: result.news !== undefined ? result.news : prev.news,
+        markets: result.markets !== undefined ? result.markets : prev.markets,
+        copilot: result.copilot !== undefined ? result.copilot : prev.copilot,
       }));
       
-      toast.success("Newsletter generated successfully!");
+      // Check if any content was actually returned
+      if (result.news || result.markets || result.copilot) {
+        toast.success("Newsletter generated successfully!");
+      } else {
+        toast.warning("No content was returned. Please try again.");
+      }
     } catch (error) {
       console.error("Failed to generate newsletter:", error);
+      toast.error("Failed to generate newsletter. Please try again.");
     } finally {
       setIsLoading(prev => ({ ...prev, all: false, news: false, markets: false, copilot: false }));
     }
@@ -62,19 +71,23 @@ const Index = () => {
       const result = await generateNewsletter({ 
         chatId: chatId,
         action: action,
-        current_content: content,
         instructions: instructions
       });
+      
+      console.log(`Regenerate ${section} result:`, result);
       
       if (result[section]) {
         setContent(prev => ({
           ...prev,
-          [section]: result[section],
+          [section]: result[section] || prev[section],
         }));
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated!`);
+      } else {
+        toast.warning(`No content was returned for the ${section} section. Please try again.`);
       }
     } catch (error) {
       console.error(`Failed to regenerate ${section} section:`, error);
+      toast.error(`Failed to regenerate ${section} section. Please try again.`);
     } finally {
       setIsLoading(prev => ({ ...prev, [section]: false }));
     }

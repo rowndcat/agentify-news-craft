@@ -69,11 +69,12 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
     
     try {
-      // Create request payload focusing only on the specific section
+      // Include current content of the section being regenerated
       const payload = {
         chatId: chatId,
         action: `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot',
-        instructions
+        instructions,
+        current_content: content[section] // Include the current section content
       };
       
       console.log(`Regenerating ${section} with payload:`, payload);

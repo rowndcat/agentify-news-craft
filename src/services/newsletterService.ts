@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
@@ -253,30 +254,37 @@ export const regenerateSection = async (
     switch(section) {
       case 'news':
         message = instructions 
-          ? `regenerate news section with the following instructions: ${instructions}`
-          : "create a new news section";
+          ? `regenerate news section only with the following instructions: ${instructions}`
+          : "create a new news section only";
         break;
       case 'markets':
         message = instructions 
-          ? `regenerate markets and economy section with the following instructions: ${instructions}` 
-          : "create a markets and economy section";
+          ? `regenerate markets and economy section only with the following instructions: ${instructions}` 
+          : "create a markets and economy section only";
         break;
       case 'copilot':
         message = instructions 
-          ? `regenerate copilot insights with the following instructions: ${instructions}` 
-          : "create a copilot insights section";
+          ? `regenerate copilot insights only with the following instructions: ${instructions}` 
+          : "create a copilot insights section only";
         break;
     }
+    
+    // Add explicit instructions to only generate the requested section
+    const requestBody = {
+      chatId,
+      message,
+      section_to_regenerate: section, // Add explicit parameter to indicate which section
+      regenerate_only: true // Flag to indicate only regenerating one section
+    };
+    
+    console.log(`Sending regeneration request for ${section} section only:`, requestBody);
     
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        chatId,
-        message,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

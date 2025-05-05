@@ -35,10 +35,13 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
     
     try {
-      const result = await generateNewsletter({
+      const payload = {
         chatId: chatId,
         message: "Generate a complete newsletter with AI news, markets, and copilot sections"
-      });
+      };
+      
+      console.log("Generate all request payload:", payload);
+      const result = await generateNewsletter(payload);
       
       console.log("Generate all result:", result);
       

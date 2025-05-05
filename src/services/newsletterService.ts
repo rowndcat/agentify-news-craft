@@ -268,6 +268,7 @@ export const regenerateSection = async (
         break;
     }
     
+    // Important: Only send the specific section request without any other sections
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
@@ -276,6 +277,8 @@ export const regenerateSection = async (
       body: JSON.stringify({
         chatId,
         message,
+        action: `regenerate_${section}`,
+        // Explicitly don't send current_content to avoid sending all sections
       }),
     });
 
@@ -297,40 +300,14 @@ export const regenerateSection = async (
     
     // Handle output format
     if (data.output && typeof data.output === 'string') {
-      // Use the full output as content if it doesn't seem to contain multiple sections
-      const output = data.output;
-      const hasSectionMarkers = 
-        output.includes("News Section") || 
-        output.includes("Economy & Markets") || 
-        output.includes("Copilot");
-      
-      if (!hasSectionMarkers) {
-        return output.trim();
-      }
-      
-      // Otherwise, try to extract just the requested section
-      const extractedSections = await generateNewsletter({
-        chatId,
-        message: `extract ${section} content from: ${output}`
-      });
-      
-      return extractedSections[section] || "";
+      // Use the full output as content
+      return data.output.trim();
     }
     
     // Try to extract from content property
     if (data.content) {
       if (typeof data.content === 'string') {
-        try {
-          const parsedContent = JSON.parse(data.content);
-          if (parsedContent[section]) {
-            return parsedContent[section];
-          }
-        } catch {
-          // If not JSON, use full content if we're looking for news
-          if (section === 'news') {
-            return data.content;
-          }
-        }
+        return data.content.trim();
       } else if (typeof data.content === 'object' && data.content[section]) {
         return data.content[section];
       }

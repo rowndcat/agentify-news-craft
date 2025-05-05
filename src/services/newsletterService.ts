@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
@@ -14,6 +13,7 @@ export interface NewsletterRequest {
   message?: string;
   action?: 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
   instructions?: string;
+  current_content?: string; // Add current content to the request
 }
 
 // Helper function to extract sections from content string using multiple strategies
@@ -69,18 +69,72 @@ const extractSectionsFromContent = (content: string): Partial<NewsletterSections
   }
   
   // If we couldn't extract any sections but have content,
-  // use heuristics to determine what we have
+  // try a more aggressive approach to parse the content
   if (!result.news && !result.markets && !result.copilot && content.trim()) {
-    // If it contains terms clearly related to markets, use as markets
-    if (/(stock|market|economy|financial|nasdaq|dow jones|investment)/i.test(content)) {
-      result.markets = content.trim();
+    console.log("No sections extracted, trying alternate parsing strategy");
+    
+    // Try to split by markdown headers
+    const sections = content.split(/#{1,3}\s+/);
+    if (sections.length > 1) {
+      // First section might be empty or contain a title
+      sections.shift();
+      
+      // Assign sections based on keywords in their titles
+      sections.forEach(section => {
+        const sectionTitle = section.split('\n')[0].toLowerCase();
+        const sectionContent = section.split('\n').slice(1).join('\n').trim();
+        
+        if (!sectionContent) return;
+        
+        if (sectionTitle.includes('news') || sectionTitle.includes('ai') || sectionTitle.includes('tech')) {
+          result.news = sectionContent;
+        } else if (sectionTitle.includes('market') || sectionTitle.includes('econom') || sectionTitle.includes('financ')) {
+          result.markets = sectionContent;
+        } else if (sectionTitle.includes('copilot') || sectionTitle.includes('insight') || sectionTitle.includes('analysis')) {
+          result.copilot = sectionContent;
+        }
+      });
     }
-    // If it contains terms clearly related to AI, use as news
-    else if (/(AI|artificial intelligence|technology|neural|machine learning)/i.test(content)) {
-      result.news = content.trim();
+    
+    // If still nothing extracted, use crude heuristics as fallback
+    if (!result.news && !result.markets && !result.copilot) {
+      // Try to guess if content has some obvious sections
+      const lines = content.split('\n');
+      let currentSection: keyof NewsletterSections | null = null;
+      
+      for (const line of lines) {
+        const lowerLine = line.toLowerCase();
+        
+        // Detect section headers
+        if (lowerLine.includes('news') || lowerLine.includes('ai news')) {
+          currentSection = 'news';
+          continue;
+        } else if (lowerLine.includes('market') || lowerLine.includes('economy')) {
+          currentSection = 'markets';
+          continue;
+        } else if (lowerLine.includes('copilot') || lowerLine.includes('insight')) {
+          currentSection = 'copilot';
+          continue;
+        }
+        
+        // Add content to current section
+        if (currentSection && line.trim()) {
+          result[currentSection] = (result[currentSection] || '') + line + '\n';
+        }
+      }
+      
+      // Clean up any trailing newlines
+      Object.keys(result).forEach(key => {
+        const section = key as keyof NewsletterSections;
+        if (result[section]) {
+          result[section] = result[section]!.trim();
+        }
+      });
     }
-    // Otherwise, use as news by default
-    else {
+    
+    // Last resort - if still nothing extracted, use the entire content as the news section
+    if (!result.news && !result.markets && !result.copilot) {
+      console.log("Using content as news section by default");
       result.news = content.trim();
     }
   }
@@ -100,25 +154,36 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     
     // Create a specific message based on the action type
     let messageToSend = request.message || "";
+    let payload = { ...request };
     
     // For regenerate actions, create targeted requests for each section
     if (request.action) {
       const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
       const sectionTitle = section.charAt(0).toUpperCase() + section.slice(1);
       
+      // Include specific instructions for regeneration
       if (request.instructions) {
-        messageToSend = `Generate ${sectionTitle} section with these instructions: ${request.instructions}`;
+        messageToSend = `Regenerate ${sectionTitle} section with these instructions: ${request.instructions}`;
       } else {
-        messageToSend = `Generate ${sectionTitle} section`;
+        messageToSend = `Regenerate ${sectionTitle} section`;
       }
+      
+      // If we have current content, include it in the message
+      if (request.current_content) {
+        messageToSend += `\n\nCurrent content: ${request.current_content}`;
+      }
+      
+      // Make sure we're only sending the relevant section data for regeneration
+      payload = {
+        chatId: request.chatId,
+        message: messageToSend,
+        action: request.action,
+        // Only include current_content for the section being regenerated
+        current_content: request.current_content
+      };
     }
     
-    // Send the request with either the original message or our constructed one
-    const payload = {
-      ...request,
-      message: messageToSend
-    };
-    
+    // Send the request with our constructed payload
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
@@ -134,79 +199,64 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     }
 
     const data = await response.json();
-    console.log("Newsletter data received:", data);
+    console.log("Raw response data:", data);
     
-    // For regenerate actions, prioritize targeted section processing
+    // For regenerate actions, handle targeted section response
     if (request.action) {
       const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
+      console.log(`Processing response for ${section} regeneration`);
       
-      // If the response includes the specific section we requested
+      // Direct property access - most common format
       if (data[section]) {
+        console.log(`Found direct ${section} property in response`);
         const result: Partial<NewsletterSections> = {};
         result[section] = data[section];
         return result;
       }
       
-      // Check for direct output text (common response format)
-      if (data.output && typeof data.output === 'string') {
-        const result: Partial<NewsletterSections> = {};
-        result[section] = data.output.trim();
-        return result;
-      }
+      // Check common properties where content might be
+      const potentialProperties = ['content', 'output', 'text', 'message', 'result', 'response', 'generatedContent'];
       
-      // Check for nested output
-      if (data.output && typeof data.output === 'object' && data.output[section]) {
-        const result: Partial<NewsletterSections> = {};
-        result[section] = data.output[section];
-        return result;
-      }
-      
-      // Check content property as string
-      if (data.content && typeof data.content === 'string') {
-        const result: Partial<NewsletterSections> = {};
-        result[section] = data.content.trim();
-        return result;
-      }
-      
-      // Check message property
-      if (data.message && typeof data.message === 'string') {
-        const result: Partial<NewsletterSections> = {};
-        result[section] = data.message.trim();
-        return result;
-      }
-      
-      // Check any other potential string properties
-      const potentialContentProperties = ['result', 'response', 'text', 'generatedContent'];
-      for (const prop of potentialContentProperties) {
+      for (const prop of potentialProperties) {
+        // Direct string content in property
         if (data[prop] && typeof data[prop] === 'string' && data[prop].trim()) {
+          console.log(`Found content in ${prop} property`);
           const result: Partial<NewsletterSections> = {};
           result[section] = data[prop].trim();
           return result;
         }
+        
+        // Nested object with section property
+        if (data[prop] && typeof data[prop] === 'object' && data[prop][section]) {
+          console.log(`Found nested ${section} in ${prop} property`);
+          const result: Partial<NewsletterSections> = {};
+          result[section] = data[prop][section];
+          return result;
+        }
       }
       
-      // If we couldn't find any direct content, try extraction if we got a string somewhere
-      const allStringContent = Object.values(data)
-        .filter(v => typeof v === 'string')
-        .join('\n');
+      // Check for content in any string property
+      const anyStringContent = Object.entries(data)
+        .filter(([_, value]) => typeof value === 'string' && value.trim().length > 0)
+        .map(([_, value]) => value as string)[0];
       
-      if (allStringContent) {
+      if (anyStringContent) {
+        console.log(`Found content in string property`);
         const result: Partial<NewsletterSections> = {};
-        result[section] = allStringContent.trim();
+        result[section] = anyStringContent.trim();
         return result;
       }
       
-      // Last resort: return empty section
       console.warn(`Could not extract content for ${section} section`);
-      const emptyResult: Partial<NewsletterSections> = {};
-      emptyResult[section] = "";
-      return emptyResult;
+      return {};
     }
     
-    // For "generate all" request, proceed with full extraction logic
-    // Case 1: Direct section data in response
+    // For "generate all" request, handle full sections extraction
+    console.log("Processing response for all sections generation");
+    
+    // Case 1: Direct section properties in response
     if (data.news || data.markets || data.copilot) {
-      console.log("Found direct section data in response");
+      console.log("Found direct section properties in response");
       return {
         news: data.news || "",
         markets: data.markets || "",
@@ -214,129 +264,57 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
       };
     }
     
-    // Case 2: API response with "output" property
-    if (data.output) {
-      console.log("Processing API response with output property");
-      
-      // If output is a string, try to parse sections from it
-      if (typeof data.output === 'string') {
-        const extractedSections = extractSectionsFromContent(data.output);
-        
-        // If we have at least one section, return it
-        if (Object.keys(extractedSections).length > 0) {
-          return extractedSections;
-        }
-        
-        // If we couldn't extract any sections but have output content,
-        // put it in the news section by default for "generate all"
-        if (data.output.trim()) {
-          return { news: data.output.trim() };
+    // Case 2: Try to extract sections from response properties
+    for (const prop of ['content', 'output', 'text', 'message', 'result', 'response']) {
+      // String content that might contain sections
+      if (data[prop] && typeof data[prop] === 'string') {
+        console.log(`Extracting sections from ${prop} property`);
+        const extracted = extractSectionsFromContent(data[prop]);
+        if (Object.keys(extracted).length > 0) {
+          return extracted;
         }
       }
       
-      // If output is an object, check for nested section data
-      if (typeof data.output === 'object' && data.output !== null) {
+      // Object that might contain section properties
+      if (data[prop] && typeof data[prop] === 'object') {
+        console.log(`Checking for sections in ${prop} object`);
         const result: Partial<NewsletterSections> = {};
-        if (data.output.news) result.news = data.output.news;
-        if (data.output.markets) result.markets = data.output.markets;
-        if (data.output.copilot) result.copilot = data.output.copilot;
-        if (Object.keys(result).length > 0) {
+        let foundAny = false;
+        
+        if (data[prop].news) {
+          result.news = data[prop].news;
+          foundAny = true;
+        }
+        if (data[prop].markets) {
+          result.markets = data[prop].markets;
+          foundAny = true;
+        }
+        if (data[prop].copilot) {
+          result.copilot = data[prop].copilot;
+          foundAny = true;
+        }
+        
+        if (foundAny) {
           return result;
         }
       }
     }
     
-    // Case 3: Check for content property
-    if (data.content) {
-      if (typeof data.content === 'string') {
-        const extractedSections = extractSectionsFromContent(data.content);
-        if (Object.keys(extractedSections).length > 0) {
-          return extractedSections;
-        }
-        
-        // If no sections extracted, attempt to parse as JSON
-        try {
-          const parsedContent = JSON.parse(data.content);
-          if (parsedContent && typeof parsedContent === 'object') {
-            const result: Partial<NewsletterSections> = {};
-            if (parsedContent.news) result.news = parsedContent.news;
-            if (parsedContent.markets) result.markets = parsedContent.markets;
-            if (parsedContent.copilot) result.copilot = parsedContent.copilot;
-            if (Object.keys(result).length > 0) {
-              return result;
-            }
-          }
-        } catch (parseError) {
-          // If parsing fails but we have content as string, put in news for "generate all"
-          if (data.content.trim()) {
-            return { news: data.content.trim() };
-          }
-        }
-      } else if (typeof data.content === 'object' && data.content !== null) {
-        // Direct object with section data
-        const result: Partial<NewsletterSections> = {};
-        if (data.content.news) result.news = data.content.news;
-        if (data.content.markets) result.markets = data.content.markets;
-        if (data.content.copilot) result.copilot = data.content.copilot;
-        if (Object.keys(result).length > 0) {
-          return result;
-        }
-      }
+    // Case 3: Last resort - extract from stringified response
+    console.log("Attempting to extract from full response");
+    // If we have any string content at all in the response
+    const allStringContent = Object.values(data)
+      .filter(val => typeof val === 'string')
+      .join('\n\n');
+    
+    if (allStringContent.trim()) {
+      return extractSectionsFromContent(allStringContent);
     }
     
-    // Case 4: Check for message property which might contain the content
-    if (data.message && typeof data.message === 'string') {
-      const extractedSections = extractSectionsFromContent(data.message);
-      if (Object.keys(extractedSections).length > 0) {
-        return extractedSections;
-      }
-      
-      // If no sections extracted, use as news for "generate all"
-      if (data.message.trim()) {
-        return { news: data.message.trim() };
-      }
-    }
-    
-    // Check for other potential properties that might contain our data
-    const potentialContentProperties = ['result', 'response', 'text', 'generatedContent'];
-    for (const prop of potentialContentProperties) {
-      if (data[prop] && typeof data[prop] === 'string' && data[prop].trim()) {
-        const extractedSections = extractSectionsFromContent(data[prop]);
-        if (Object.keys(extractedSections).length > 0) {
-          return extractedSections;
-        }
-        
-        // If no sections but we have content, use for news in "generate all"
-        if (data[prop].trim()) {
-          return { news: data[prop].trim() };
-        }
-      }
-    }
-    
-    // If we get to this point and have no content but received a successful response,
-    // stringify the entire response as a last resort
-    console.warn("Could not extract newsletter content from response:", data);
-    
-    // Last attempt: stringify the entire response and try to extract something
-    const dataString = JSON.stringify(data);
-    if (dataString && dataString.length > 10) {
-      try {
-        // Look for any patterns that might indicate newsletter content
-        const contentMatch = dataString.match(/"(?:content|text|message|output)"\s*:\s*"([^"]+)"/);
-        if (contentMatch && contentMatch[1]) {
-          return { news: contentMatch[1] };
-        }
-      } catch (e) {
-        console.error("Error in final extraction attempt:", e);
-      }
-    }
-    
-    toast.error("Received response with unexpected format. Check console for details.");
-    return {
-      news: "",
-      markets: "",
-      copilot: "",
-    };
+    // If we still couldn't extract any content
+    console.warn("Failed to extract any content from the response");
+    toast.warning("Failed to extract content from the API response. Try again or check the API format.");
+    return {};
   } catch (error) {
     console.error("Error generating newsletter:", error);
     toast.error("Failed to generate newsletter content. Please try again.");
@@ -348,11 +326,10 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
 export const regenerateSection = async (
   section: keyof NewsletterSections,
   chatId: string,
+  currentContent: string,
   instructions?: string
 ): Promise<string> => {
   // This function is maintained for backward compatibility
-  // It now uses the main generateNewsletter function with appropriate action
-  
   try {
     console.log(`Regenerating ${section} section with${instructions ? '' : 'out'} instructions`);
     
@@ -361,7 +338,8 @@ export const regenerateSection = async (
     const result = await generateNewsletter({
       chatId,
       action,
-      instructions
+      instructions,
+      current_content: currentContent
     });
     
     return result[section] || "";

@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
@@ -22,37 +23,60 @@ const extractSectionsFromContent = (content: string): Partial<NewsletterSections
   
   const result: Partial<NewsletterSections> = {};
   
+  // Clean the content string to handle potential formatting issues
+  const cleanContent = content
+    .replace(/\\n/g, '\n')  // Replace escaped newlines
+    .replace(/\n{3,}/g, '\n\n'); // Replace excessive newlines
+  
   // Define patterns for each section with variations
   const newsPatterns = [
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*News\s+Section\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*AI\s+News\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Technology\s+News\s*(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:Economy|Markets|Copilot)|$))/i
+    /(?:^|\n)(?:#+\s*|\*\*)?(?:News Section|AI News|Technology News)(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?(?:Economy|Markets|Copilot)|$))/i,
+    // Match variations like "**News Section**" with all content after it
+    /\*\*News Section\*\*([\s\S]*?)(?=\*\*Economy|$)/i,
+    // Match "News Section" header and grab all content after it
+    /News Section([\s\S]*?)(?=Economy & Markets Section|$)/i
   ];
   
   const marketsPatterns = [
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Economy\s*&?\s*Markets\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Markets\s*&?\s*Economy\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Financial\s+Markets\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?\s*(?:News|Copilot|AI\s+Copilot)|$))/i
+    /(?:^|\n)(?:#+\s*|\*\*)?(?:Economy\s*&?\s*Markets|Markets\s*&?\s*Economy|Financial Markets)(?:\s*Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)(?=(?:\n\s*(?:#+\s*|\*\*)?(?:News|Copilot|AI\s+Copilot)|$))/i,
+    // Match variations like "**Economy & Markets Section**" with all content after it
+    /\*\*Economy & Markets Section\*\*([\s\S]*?)(?=\*\*Copilot|$)/i,
+    // Match "Economy & Markets Section" header and grab all content after it
+    /Economy & Markets Section([\s\S]*?)(?=Copilot|$)/i
   ];
   
   const copilotPatterns = [
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Copilot\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*AI\s+Copilot\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i,
-    /(?:^|\n)(?:#+\s*|\*\*)?\s*Insights\s*(?:Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i
+    /(?:^|\n)(?:#+\s*|\*\*)?(?:Copilot|AI\s+Copilot|Insights)(?:\s*Section)?(?:\*\*)?(?:\:)?(?:\n|$)([\s\S]*?)$/i,
+    // Match variations like "**Copilot**" with all content after it
+    /\*\*(?:Copilot|AI Copilot)\*\*([\s\S]*?)$/i,
+    // Match "Copilot" header and grab all content after it
+    /Copilot([\s\S]*?)$/i
   ];
   
   // Try to extract news section
   for (const pattern of newsPatterns) {
-    const match = content.match(pattern);
+    const match = cleanContent.match(pattern);
     if (match && match[1] && match[1].trim()) {
-      result.news = match[1].trim();
+      // For news section, include the entire content if it's a placeholder message
+      const newsContent = match[1].trim();
+      if (newsContent.includes("No specific AI news") || 
+          newsContent.includes("No additional articles")) {
+        // This is a placeholder - use the whole section including headers
+        const fullNewsSection = cleanContent.match(/News Section[\s\S]*?(?=Economy & Markets Section|$)/i);
+        if (fullNewsSection && fullNewsSection[0]) {
+          result.news = fullNewsSection[0].trim();
+          break;
+        }
+      }
+      
+      result.news = newsContent;
       break;
     }
   }
   
   // Try to extract markets section
   for (const pattern of marketsPatterns) {
-    const match = content.match(pattern);
+    const match = cleanContent.match(pattern);
     if (match && match[1] && match[1].trim()) {
       result.markets = match[1].trim();
       break;
@@ -61,7 +85,7 @@ const extractSectionsFromContent = (content: string): Partial<NewsletterSections
   
   // Try to extract copilot section
   for (const pattern of copilotPatterns) {
-    const match = content.match(pattern);
+    const match = cleanContent.match(pattern);
     if (match && match[1] && match[1].trim()) {
       result.copilot = match[1].trim();
       break;
@@ -70,72 +94,77 @@ const extractSectionsFromContent = (content: string): Partial<NewsletterSections
   
   // If we couldn't extract any sections but have content,
   // try a more aggressive approach to parse the content
-  if (!result.news && !result.markets && !result.copilot && content.trim()) {
+  if (!result.news && !result.markets && !result.copilot && cleanContent.trim()) {
     console.log("No sections extracted, trying alternate parsing strategy");
     
-    // Try to split by markdown headers
-    const sections = content.split(/#{1,3}\s+/);
-    if (sections.length > 1) {
-      // First section might be empty or contain a title
-      sections.shift();
-      
-      // Assign sections based on keywords in their titles
-      sections.forEach(section => {
-        const sectionTitle = section.split('\n')[0].toLowerCase();
-        const sectionContent = section.split('\n').slice(1).join('\n').trim();
-        
-        if (!sectionContent) return;
-        
-        if (sectionTitle.includes('news') || sectionTitle.includes('ai') || sectionTitle.includes('tech')) {
-          result.news = sectionContent;
-        } else if (sectionTitle.includes('market') || sectionTitle.includes('econom') || sectionTitle.includes('financ')) {
-          result.markets = sectionContent;
-        } else if (sectionTitle.includes('copilot') || sectionTitle.includes('insight') || sectionTitle.includes('analysis')) {
-          result.copilot = sectionContent;
-        }
-      });
-    }
-    
-    // If still nothing extracted, use crude heuristics as fallback
-    if (!result.news && !result.markets && !result.copilot) {
-      // Try to guess if content has some obvious sections
-      const lines = content.split('\n');
-      let currentSection: keyof NewsletterSections | null = null;
-      
-      for (const line of lines) {
-        const lowerLine = line.toLowerCase();
-        
-        // Detect section headers
-        if (lowerLine.includes('news') || lowerLine.includes('ai news')) {
-          currentSection = 'news';
-          continue;
-        } else if (lowerLine.includes('market') || lowerLine.includes('economy')) {
-          currentSection = 'markets';
-          continue;
-        } else if (lowerLine.includes('copilot') || lowerLine.includes('insight')) {
-          currentSection = 'copilot';
-          continue;
-        }
-        
-        // Add content to current section
-        if (currentSection && line.trim()) {
-          result[currentSection] = (result[currentSection] || '') + line + '\n';
-        }
+    // Special handling for output that has section headers but doesn't match our patterns
+    // First, extract any full news section content
+    if (cleanContent.includes("News Section")) {
+      // Get everything from "News Section" to "Economy & Markets Section" (or end)
+      const newsMatch = cleanContent.match(/News Section[\s\S]*?(?=Economy & Markets Section|$)/i);
+      if (newsMatch && newsMatch[0]) {
+        result.news = newsMatch[0].trim();
       }
-      
-      // Clean up any trailing newlines
-      Object.keys(result).forEach(key => {
-        const section = key as keyof NewsletterSections;
-        if (result[section]) {
-          result[section] = result[section]!.trim();
-        }
-      });
     }
     
-    // Last resort - if still nothing extracted, use the entire content as the news section
+    // Extract any markets section content
+    if (cleanContent.includes("Economy & Markets Section")) {
+      // Get everything from "Economy & Markets Section" to "Copilot" (or end)
+      const marketsMatch = cleanContent.match(/Economy & Markets Section[\s\S]*?(?=Copilot|$)/i);
+      if (marketsMatch && marketsMatch[0]) {
+        result.markets = marketsMatch[0].trim();
+      }
+    }
+    
+    // Extract any copilot section content
+    if (cleanContent.includes("Copilot")) {
+      // Get everything from "Copilot" to the end
+      const copilotMatch = cleanContent.match(/Copilot[\s\S]*$/i);
+      if (copilotMatch && copilotMatch[0]) {
+        result.copilot = copilotMatch[0].trim();
+      }
+    }
+    
+    // If we still have nothing, try splitting by markdown headers
     if (!result.news && !result.markets && !result.copilot) {
-      console.log("Using content as news section by default");
-      result.news = content.trim();
+      const sections = cleanContent.split(/#{1,3}\s+/);
+      if (sections.length > 1) {
+        // First section might be empty or contain a title
+        sections.shift();
+        
+        // Assign sections based on keywords in their titles
+        sections.forEach(section => {
+          const sectionTitle = section.split('\n')[0].toLowerCase();
+          const sectionContent = section.split('\n').slice(1).join('\n').trim();
+          
+          if (!sectionContent) return;
+          
+          if (sectionTitle.includes('news') || sectionTitle.includes('ai') || sectionTitle.includes('tech')) {
+            result.news = sectionContent;
+          } else if (sectionTitle.includes('market') || sectionTitle.includes('econom') || sectionTitle.includes('financ')) {
+            result.markets = sectionContent;
+          } else if (sectionTitle.includes('copilot') || sectionTitle.includes('insight') || sectionTitle.includes('analysis')) {
+            result.copilot = sectionContent;
+          }
+        });
+      }
+    }
+    
+    // Last resort - if we only have one section's worth of content, try to determine which
+    if (Object.keys(result).length === 0 && cleanContent.trim()) {
+      // Analyze the content to guess which section it belongs to
+      const lowerContent = cleanContent.toLowerCase();
+      
+      if (lowerContent.includes('news') || lowerContent.includes('ai development') || lowerContent.includes('technology breakthroughs')) {
+        result.news = cleanContent.trim();
+      } else if (lowerContent.includes('market') || lowerContent.includes('econom') || lowerContent.includes('financ') || lowerContent.includes('inflation')) {
+        result.markets = cleanContent.trim();
+      } else if (lowerContent.includes('insight') || lowerContent.includes('analysis') || lowerContent.includes('key takeaway')) {
+        result.copilot = cleanContent.trim();
+      } else {
+        // If we can't determine, default to news
+        result.news = cleanContent.trim();
+      }
     }
   }
   
@@ -254,7 +283,13 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     // For "generate all" request, handle full sections extraction
     console.log("Processing response for all sections generation");
     
-    // Case 1: Direct section properties in response
+    // Case 1: Response is already a string containing all sections
+    if (typeof data === 'string' && data.trim()) {
+      console.log("Response is a string, extracting sections");
+      return extractSectionsFromContent(data);
+    }
+    
+    // Case 2: Direct section properties in response
     if (data.news || data.markets || data.copilot) {
       console.log("Found direct section properties in response");
       return {
@@ -264,51 +299,47 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
       };
     }
     
-    // Case 2: Try to extract sections from response properties
-    for (const prop of ['content', 'output', 'text', 'message', 'result', 'response']) {
-      // String content that might contain sections
-      if (data[prop] && typeof data[prop] === 'string') {
+    // Case 3: Extract from content property if it exists and is a string
+    if (data.content && typeof data.content === 'string' && data.content.trim()) {
+      console.log("Extracting sections from content property");
+      return extractSectionsFromContent(data.content);
+    }
+    
+    // Case 4: Check message property which is common in webhook responses
+    if (data.message && typeof data.message === 'string' && data.message.trim()) {
+      console.log("Extracting sections from message property");
+      return extractSectionsFromContent(data.message);
+    }
+    
+    // Case 5: Try various other common property names
+    const potentialProperties = ['output', 'text', 'result', 'response', 'generatedContent', 'answer'];
+    
+    for (const prop of potentialProperties) {
+      if (data[prop] && typeof data[prop] === 'string' && data[prop].trim()) {
         console.log(`Extracting sections from ${prop} property`);
-        const extracted = extractSectionsFromContent(data[prop]);
-        if (Object.keys(extracted).length > 0) {
-          return extracted;
-        }
-      }
-      
-      // Object that might contain section properties
-      if (data[prop] && typeof data[prop] === 'object') {
-        console.log(`Checking for sections in ${prop} object`);
-        const result: Partial<NewsletterSections> = {};
-        let foundAny = false;
-        
-        if (data[prop].news) {
-          result.news = data[prop].news;
-          foundAny = true;
-        }
-        if (data[prop].markets) {
-          result.markets = data[prop].markets;
-          foundAny = true;
-        }
-        if (data[prop].copilot) {
-          result.copilot = data[prop].copilot;
-          foundAny = true;
-        }
-        
-        if (foundAny) {
-          return result;
-        }
+        return extractSectionsFromContent(data[prop]);
       }
     }
     
-    // Case 3: Last resort - extract from stringified response
-    console.log("Attempting to extract from full response");
-    // If we have any string content at all in the response
-    const allStringContent = Object.values(data)
-      .filter(val => typeof val === 'string')
-      .join('\n\n');
+    // Case 6: Look for any property that is a string and try to extract sections
+    const stringProps = Object.entries(data).filter(([_, value]) => typeof value === 'string' && value.trim().length > 0);
     
-    if (allStringContent.trim()) {
-      return extractSectionsFromContent(allStringContent);
+    if (stringProps.length > 0) {
+      console.log("Found string properties, trying to extract sections");
+      // Combine all string properties and try to extract sections
+      const combinedContent = stringProps.map(([_, value]) => value).join('\n\n');
+      return extractSectionsFromContent(combinedContent);
+    }
+    
+    // Case 7: If data itself doesn't have expected structure, attempt to stringify and parse
+    console.log("Attempting to extract from stringified response");
+    try {
+      const dataStr = JSON.stringify(data);
+      if (dataStr && dataStr.length > 2) { // Not just "{}" or "[]"
+        return extractSectionsFromContent(dataStr);
+      }
+    } catch (e) {
+      console.error("Error stringifying data:", e);
     }
     
     // If we still couldn't extract any content

@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,21 +33,37 @@ interface NewsletterSectionProps {
 const formatMarkdown = (text: string): string => {
   if (!text) return "";
   
-  // First, remove any headers that might be part of section titles
-  // to avoid duplicate section headers in the UI
-  let formattedText = text
-    .replace(/^###?\s*(\*\*)?News Section(\*\*)?/i, "")
-    .replace(/^###?\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
-    .replace(/^###?\s*(\*\*)?Copilot(\*\*)?/i, "")
-    .replace(/^###?\s*(\*\*)?AI Copilot(\*\*)?/i, "");
+  // Pre-processing for special cases, particularly News Section headers
+  let formattedText = text;
   
-  // Remove asterisks from title that might appear
-  formattedText = formattedText
-    .replace(/^\*\*News Section.*?\*\*/i, "")
-    .replace(/^\*\*Economy & Markets Section.*?\*\*/i, "")
-    .replace(/^\*\*Copilot.*?\*\*/i, "")
-    .replace(/^\*\*AI Copilot.*?\*\*/i, "");
+  // First, handle the case where the text includes the section header
+  if (formattedText.includes("News Section") || 
+      formattedText.includes("AI News piece") || 
+      formattedText.includes("additional article links")) {
     
+    // Keep these specific headers for the News section since they're part of the content
+    formattedText = formattedText
+      // Make sure headers are properly formatted
+      .replace(/\*\*News Section\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">News Section</h3>')
+      .replace(/\*AI News piece\*:/g, '<strong>AI News piece</strong>:')
+      .replace(/\*7 additional article links\*:/g, '<strong>7 additional article links</strong>:');
+  } else {
+    // For other sections, remove any headers that might be part of section titles
+    // to avoid duplicate section headers in the UI
+    formattedText = formattedText
+      .replace(/^###?\s*(\*\*)?News Section(\*\*)?/i, "")
+      .replace(/^###?\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
+      .replace(/^###?\s*(\*\*)?Copilot(\*\*)?/i, "")
+      .replace(/^###?\s*(\*\*)?AI Copilot(\*\*)?/i, "");
+    
+    // Remove asterisks from title that might appear
+    formattedText = formattedText
+      .replace(/^\*\*News Section.*?\*\*/i, "")
+      .replace(/^\*\*Economy & Markets Section.*?\*\*/i, "")
+      .replace(/^\*\*Copilot.*?\*\*/i, "")
+      .replace(/^\*\*AI Copilot.*?\*\*/i, "");
+  }
+  
   // Replace markdown headers
   formattedText = formattedText
     // Headers

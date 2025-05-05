@@ -19,7 +19,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { generateNewsletter } from "@/services/newsletterService";
 
 interface NewsletterSectionProps {
   title: string;
@@ -33,42 +32,58 @@ interface NewsletterSectionProps {
 const formatMarkdown = (text: string): string => {
   if (!text) return "";
   
-  // Pre-processing for special cases, particularly News Section headers
+  console.log("Formatting markdown for text starting with:", text.substring(0, 50));
+  
+  // Pre-processing for special cases
   let formattedText = text;
   
-  // First, handle the case where the text includes the section header
-  if (formattedText.includes("News Section") || 
-      formattedText.includes("AI News piece") || 
-      formattedText.includes("additional article links")) {
+  // Preserve placeholder content in News Section
+  if (formattedText.includes("**News Section**") || 
+      formattedText.includes("*AI News piece*") || 
+      formattedText.includes("*7 additional article links*")) {
     
-    // Keep these specific headers for the News section since they're part of the content
+    // Keep these specific headers for the News section since they're part of the content structure
     formattedText = formattedText
-      // Make sure headers are properly formatted
-      .replace(/\*\*News Section\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">News Section</h3>')
+      // Make section header stand out
+      .replace(/\*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>')
+      // Format placeholder items
       .replace(/\*AI News piece\*:/g, '<strong>AI News piece</strong>:')
       .replace(/\*7 additional article links\*:/g, '<strong>7 additional article links</strong>:');
-  } else {
-    // For other sections, remove any headers that might be part of section titles
-    // to avoid duplicate section headers in the UI
-    formattedText = formattedText
-      .replace(/^###?\s*(\*\*)?News Section(\*\*)?/i, "")
-      .replace(/^###?\s*(\*\*)?Economy & Markets Section(\*\*)?/i, "")
-      .replace(/^###?\s*(\*\*)?Copilot(\*\*)?/i, "")
-      .replace(/^###?\s*(\*\*)?AI Copilot(\*\*)?/i, "");
-    
-    // Remove asterisks from title that might appear
-    formattedText = formattedText
-      .replace(/^\*\*News Section.*?\*\*/i, "")
-      .replace(/^\*\*Economy & Markets Section.*?\*\*/i, "")
-      .replace(/^\*\*Copilot.*?\*\*/i, "")
-      .replace(/^\*\*AI Copilot.*?\*\*/i, "");
   }
   
-  // Replace markdown headers
+  // For Markets section with emoji headers
+  if (formattedText.includes("**Economy & Markets Section**") ||
+      formattedText.includes("🌍 Big Picture") || 
+      formattedText.includes("📈 What to Watch") ||
+      formattedText.includes("🔑 Key Takeaway")) {
+      
+    // Make section header stand out
+    formattedText = formattedText
+      .replace(/\*\*Economy & Markets Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Economy & Markets Section</h2>');
+      
+    // Handle emoji headers
+    formattedText = formattedText
+      .replace(/###\s*🌍 Big Picture/g, '<h3 class="text-lg font-medium mb-2 mt-4">🌍 Big Picture</h3>')
+      .replace(/###\s*📈 What to Watch/g, '<h3 class="text-lg font-medium mb-2 mt-4">📈 What to Watch</h3>')
+      .replace(/###\s*🔑 Key Takeaway/g, '<h3 class="text-lg font-medium mb-2 mt-4">🔑 Key Takeaway</h3>')
+      .replace(/🌍 Big Picture/g, '<h3 class="text-lg font-medium mb-2 mt-4">🌍 Big Picture</h3>')
+      .replace(/📈 What to Watch/g, '<h3 class="text-lg font-medium mb-2 mt-4">📈 What to Watch</h3>')
+      .replace(/🔑 Key Takeaway/g, '<h3 class="text-lg font-medium mb-2 mt-4">🔑 Key Takeaway</h3>');
+  }
+  
+  // For Copilot section
+  if (formattedText.includes("**Copilot**") || formattedText.includes("**AI Copilot**")) {
+    // Make section header stand out
+    formattedText = formattedText
+      .replace(/\*\*Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Copilot</h2>')
+      .replace(/\*\*AI Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">AI Copilot</h2>');
+  }
+  
+  // Replace markdown headers (that haven't been processed already)
   formattedText = formattedText
     // Headers
     .replace(/### (.*?)\n/g, '<h3 class="text-lg font-medium mb-2 mt-4">$1</h3>')
-    .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3 mt-4">$2</h2>')
+    .replace(/## (.*?)\n/g, '<h2 class="text-xl font-medium mb-3 mt-4">$1</h2>')
     .replace(/# (.*?)\n/g, '<h1 class="text-2xl font-medium mb-4 mt-5">$1</h1>')
     // Bold
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -113,6 +128,10 @@ const formatMarkdown = (text: string): string => {
     
   // Clean up any markdown dividers
   formattedText = formattedText.replace(/---/g, '<hr class="my-4" />');
+  
+  // Handle parenthetical references like (Reuters, Bloomberg)
+  formattedText = formattedText.replace(/\((Reuters|Bloomberg|NYT|CNN|AP)(?:,\s*(Reuters|Bloomberg|NYT|CNN|AP))*\)/g, 
+    '<span class="text-gray-500 text-sm">$&</span>');
     
   return formattedText;
 };
@@ -175,6 +194,12 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
 
   // Determine if there's actual content to display
   const hasContent = content && content.trim().length > 0;
+  
+  // Debug content
+  console.log(`${title} content available:`, hasContent);
+  if (hasContent) {
+    console.log(`${title} content preview:`, content.substring(0, 100) + "...");
+  }
 
   return (
     <>

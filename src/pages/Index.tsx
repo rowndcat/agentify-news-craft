@@ -44,14 +44,21 @@ const Index = () => {
       const result = await generateNewsletter(payload);
       
       console.log("Generate all result:", result);
+      console.log("Result type:", typeof result);
+      console.log("Result keys:", Object.keys(result));
+      
+      // Debug the actual content received
+      if (result.news) console.log("News content received:", result.news.substring(0, 100) + "...");
+      if (result.markets) console.log("Markets content received:", result.markets.substring(0, 100) + "...");
+      if (result.copilot) console.log("Copilot content received:", result.copilot.substring(0, 100) + "...");
       
       if (result) {
-        // Make sure we're correctly updating the state with the received sections
-        setContent(prev => ({
-          news: result.news || prev.news,
-          markets: result.markets || prev.markets,
-          copilot: result.copilot || prev.copilot,
-        }));
+        // Force state update with the received sections, with fallbacks to prevent empty updates
+        setContent({
+          news: result.news || "",
+          markets: result.markets || "",
+          copilot: result.copilot || "",
+        });
         
         // Check if any content was actually returned
         if (result.news || result.markets || result.copilot) {
@@ -59,6 +66,8 @@ const Index = () => {
         } else {
           toast.warning("No content was returned. Please try again.");
         }
+      } else {
+        toast.error("Failed to get response from API. Please try again.");
       }
     } catch (error) {
       console.error("Failed to generate newsletter:", error);
@@ -84,14 +93,18 @@ const Index = () => {
       const result = await generateNewsletter(payload);
       
       console.log(`Regenerate ${section} result:`, result);
+      console.log(`${section} result type:`, typeof result);
+      console.log(`${section} received content:`, result[section] ? result[section].substring(0, 100) + "..." : "No content");
       
       if (result && result[section]) {
+        // Force state update with only the specified section
         setContent(prev => ({
           ...prev,
-          [section]: result[section] || prev[section],
+          [section]: result[section],
         }));
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated!`);
       } else {
+        console.error(`No content returned for ${section} section:`, result);
         toast.warning(`No content was returned for the ${section} section. Please try again.`);
       }
     } catch (error) {

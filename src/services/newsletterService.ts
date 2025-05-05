@@ -21,6 +21,12 @@ export interface NewsletterRequest {
 const extractSectionsFromContent = (content: string): Partial<NewsletterSections> => {
   console.log("Raw content to extract sections from:", content);
   
+  // Initial defensive checks
+  if (!content || typeof content !== 'string') {
+    console.error("Invalid content received for extraction:", content);
+    return {};
+  }
+  
   const result: Partial<NewsletterSections> = {};
   
   // First, check if the content is a JSON string that we can parse
@@ -43,111 +49,134 @@ const extractSectionsFromContent = (content: string): Partial<NewsletterSections
   // Clean the content string to handle potential formatting issues
   const cleanContent = content
     .replace(/\\n/g, '\n')  // Replace escaped newlines
-    .replace(/\n{3,}/g, '\n\n'); // Replace excessive newlines
+    .replace(/\n{3,}/g, '\n\n') // Replace excessive newlines
+    .replace(/\\"/g, '"')   // Replace escaped quotes
+    .replace(/\\\\/g, '\\'); // Replace double backslashes
   
-  console.log("Cleaned content:", cleanContent.substring(0, 150) + "...");
+  console.log("Cleaned content for extraction:", cleanContent.substring(0, 150) + "...");
+  
+  // Try to detect if content has the placeholder format (common in news section responses)
+  if (cleanContent.includes("**News Section**") && 
+      cleanContent.includes("*AI News piece*:") && 
+      cleanContent.includes("*7 additional article links*:")) {
+    result.news = cleanContent.match(/\*\*News Section\*\*[\s\S]*?(?=\*\*Economy|\*\*Markets|\*\*Copilot|$)/i)?.[0] || "";
+    console.log("Detected placeholder news section format");
+  }
+  
+  // CHECK FOR EMOJI SECTIONS FIRST (these are commonly used in the markets section)
+  if (cleanContent.includes("🌍 Big Picture") || 
+      cleanContent.includes("📈 What to Watch") || 
+      cleanContent.includes("🔑 Key Takeaway")) {
+    
+    // Collect all the emoji sections for Markets
+    const bigPictureMatch = cleanContent.match(/(?:###?\s*)?🌍 Big Picture[\s\S]*?(?=(?:###?\s*)?(?:📈|🔑|$))/i);
+    const whatToWatchMatch = cleanContent.match(/(?:###?\s*)?📈 What to Watch[\s\S]*?(?=(?:###?\s*)?(?:🔑|🌍|$))/i);
+    const keyTakeawayMatch = cleanContent.match(/(?:###?\s*)?🔑 Key Takeaway[\s\S]*?(?=(?:###?\s*)?(?:🌍|📈|$))/i);
+    
+    let marketsContent = "";
+    const needHeader = !cleanContent.includes("**Economy & Markets Section**");
+    
+    if (needHeader) marketsContent = "**Economy & Markets Section**\n\n";
+    if (bigPictureMatch && bigPictureMatch[0]) marketsContent += bigPictureMatch[0].trim() + "\n\n";
+    if (whatToWatchMatch && whatToWatchMatch[0]) marketsContent += whatToWatchMatch[0].trim() + "\n\n";
+    if (keyTakeawayMatch && keyTakeawayMatch[0]) marketsContent += keyTakeawayMatch[0].trim();
+    
+    if (marketsContent.trim()) {
+      result.markets = marketsContent.trim();
+      console.log("Extracted markets with emoji sections");
+    }
+  }
   
   // Check for News Section with format "**News Section**"
-  let newsMatch = cleanContent.match(/\*\*News Section\*\*[\s\S]*?(?=\*\*Economy|\*\*Markets|\*\*Copilot|$)/i);
-  if (newsMatch && newsMatch[0]) {
-    result.news = newsMatch[0].trim();
-    console.log("Extracted news section (format 1):", result.news.substring(0, 50) + "...");
+  if (!result.news) {
+    const newsMatch = cleanContent.match(/\*\*News Section\*\*[\s\S]*?(?=\*\*Economy|\*\*Markets|\*\*Copilot|$)/i);
+    if (newsMatch && newsMatch[0]) {
+      result.news = newsMatch[0].trim();
+      console.log("Extracted news section (format 1):", result.news.substring(0, 50) + "...");
+    }
   }
   
   // Alternative format: look for section with "### News" or "# News"
   if (!result.news) {
-    newsMatch = cleanContent.match(/(?:#+\s*News|News Section)[\s\S]*?(?=#+\s*(?:Economy|Markets|Copilot)|$)/i);
+    const newsMatch = cleanContent.match(/(?:#+\s*News|News Section)[\s\S]*?(?=#+\s*(?:Economy|Markets|Copilot)|$)/i);
     if (newsMatch && newsMatch[0]) {
-      result.news = newsMatch[0].trim();
+      result.news = "**News Section**\n\n" + newsMatch[0].trim();
       console.log("Extracted news section (format 2):", result.news.substring(0, 50) + "...");
     }
   }
   
   // Check for AI News placeholder content format
-  if (!result.news && cleanContent.includes("AI News piece") && cleanContent.includes("additional article links")) {
-    newsMatch = cleanContent.match(/\*AI News piece\*[\s\S]*?\*7 additional article links\*[\s\S]*?(?=---|\*\*Economy|$)/i);
+  if (!result.news && (cleanContent.includes("AI News piece") || cleanContent.includes("additional article links"))) {
+    const newsMatch = cleanContent.match(/(?:\*AI News piece\*|\*7 additional article links\*)[\s\S]*?(?=---|\*\*Economy|$)/i);
     if (newsMatch && newsMatch[0]) {
-      result.news = "**News Section**\n" + newsMatch[0].trim();
+      result.news = "**News Section**\n\n" + newsMatch[0].trim();
       console.log("Extracted AI News placeholder content");
     }
   }
   
   // Check for Markets section with format "**Economy & Markets Section**"
-  let marketsMatch = cleanContent.match(/\*\*Economy & Markets Section\*\*[\s\S]*?(?=\*\*News|\*\*Copilot|$)/i);
-  if (marketsMatch && marketsMatch[0]) {
-    result.markets = marketsMatch[0].trim();
-    console.log("Extracted markets section (format 1):", result.markets.substring(0, 50) + "...");
+  if (!result.markets) {
+    const marketsMatch = cleanContent.match(/\*\*Economy & Markets Section\*\*[\s\S]*?(?=\*\*News|\*\*Copilot|$)/i);
+    if (marketsMatch && marketsMatch[0]) {
+      result.markets = marketsMatch[0].trim();
+      console.log("Extracted markets section (format 1):", result.markets.substring(0, 50) + "...");
+    }
   }
   
   // Alternative format: look for section with "### Economy" or "# Markets"
   if (!result.markets) {
-    marketsMatch = cleanContent.match(/(?:#+\s*(?:Economy|Markets)|Economy & Markets Section)[\s\S]*?(?=#+\s*(?:News|Copilot)|$)/i);
+    const marketsMatch = cleanContent.match(/(?:#+\s*(?:Economy|Markets)|Economy & Markets)[\s\S]*?(?=#+\s*(?:News|Copilot)|$)/i);
     if (marketsMatch && marketsMatch[0]) {
-      result.markets = marketsMatch[0].trim();
+      result.markets = "**Economy & Markets Section**\n\n" + marketsMatch[0].trim();
       console.log("Extracted markets section (format 2):", result.markets.substring(0, 50) + "...");
     }
   }
   
-  // Check for 🌍 Big Picture format which is commonly used in Markets section
-  if (!result.markets && cleanContent.includes("🌍 Big Picture")) {
-    marketsMatch = cleanContent.match(/(?:###\s*)?🌍 Big Picture[\s\S]*?(?=(?:###\s*)?(?:📈 What to Watch)|$)/i);
-    const whatToWatchMatch = cleanContent.match(/(?:###\s*)?📈 What to Watch[\s\S]*?(?=(?:###\s*)?(?:🔑 Key Takeaway)|$)/i);
-    const keyTakeawayMatch = cleanContent.match(/(?:###\s*)?🔑 Key Takeaway[\s\S]*?$/i);
-    
-    let marketsContent = "";
-    if (marketsMatch && marketsMatch[0]) marketsContent += marketsMatch[0].trim() + "\n\n";
-    if (whatToWatchMatch && whatToWatchMatch[0]) marketsContent += whatToWatchMatch[0].trim() + "\n\n";
-    if (keyTakeawayMatch && keyTakeawayMatch[0]) marketsContent += keyTakeawayMatch[0].trim();
-    
-    if (marketsContent) {
-      result.markets = "**Economy & Markets Section**\n" + marketsContent.trim();
-      console.log("Extracted markets with emoji sections");
-    }
-  }
-  
   // Check for Copilot section with format "**Copilot**" or "**AI Copilot**"
-  let copilotMatch = cleanContent.match(/\*\*(?:Copilot|AI Copilot)\*\*[\s\S]*?$/i);
-  if (copilotMatch && copilotMatch[0]) {
-    result.copilot = copilotMatch[0].trim();
-    console.log("Extracted copilot section (format 1):", result.copilot.substring(0, 50) + "...");
+  if (!result.copilot) {
+    const copilotMatch = cleanContent.match(/\*\*(?:Copilot|AI Copilot)\*\*[\s\S]*?$/i);
+    if (copilotMatch && copilotMatch[0]) {
+      result.copilot = copilotMatch[0].trim();
+      console.log("Extracted copilot section (format 1):", result.copilot.substring(0, 50) + "...");
+    }
   }
   
   // Alternative format: look for section with "### Copilot" or "# Insights"
   if (!result.copilot) {
-    copilotMatch = cleanContent.match(/(?:#+\s*(?:Copilot|Insights)|Copilot)[\s\S]*?$/i);
+    const copilotMatch = cleanContent.match(/(?:#+\s*(?:Copilot|Insights)|Copilot)[\s\S]*?$/i);
     if (copilotMatch && copilotMatch[0]) {
-      result.copilot = copilotMatch[0].trim();
+      result.copilot = "**Copilot**\n\n" + copilotMatch[0].trim();
       console.log("Extracted copilot section (format 2):", result.copilot.substring(0, 50) + "...");
     }
   }
   
+  // If content contains only one section by name but has all the content, assign it to all sections
+  if (Object.keys(result).length === 0 && cleanContent.includes("News Section") && cleanContent.includes("Economy & Markets Section")) {
+    // This might be a case where all content is in one big chunk
+    console.log("Attempting to extract all sections from a single content block");
+    
+    result.news = "**News Section**\n\n" + (cleanContent.match(/\*AI News piece\*[\s\S]*?(?=---|\*\*Economy|$)/i)?.[0] || "");
+    result.markets = "**Economy & Markets Section**\n\n" + (cleanContent.match(/🌍 Big Picture[\s\S]*?🔑 Key Takeaway[\s\S]*?(?=\*\*Copilot|$)/i)?.[0] || "");
+    result.copilot = "**Copilot**\n\n" + (cleanContent.match(/\*\*Copilot\*\*[\s\S]*?$/i)?.[0]?.replace(/^\*\*Copilot\*\*/, "") || "");
+  }
+  
   // If we still couldn't extract content, try more aggressive approaches
   if (!result.news && !result.markets && !result.copilot) {
-    console.log("Standard extraction failed, trying direct content extraction");
+    console.log("Standard extraction failed, trying raw content assignment");
     
-    // For a typical 3-section newsletter, we can try to just split the content into thirds
-    // This is a last resort, but better than returning nothing
-    const contentLines = cleanContent.split('\n').filter(line => line.trim());
-    
-    if (contentLines.length >= 6) { // Make sure there's enough content to split
-      const sectionSize = Math.floor(contentLines.length / 3);
-      
-      result.news = contentLines.slice(0, sectionSize).join('\n');
-      result.markets = contentLines.slice(sectionSize, sectionSize * 2).join('\n');
-      result.copilot = contentLines.slice(sectionSize * 2).join('\n');
-      
-      console.log("Applied fallback content splitting");
-    } else if (contentLines.length > 0) {
-      // If we have just a little content, assign it to news section
+    // Last resort: just assign the entire content to news section
+    if (cleanContent.trim()) {
       result.news = cleanContent;
       console.log("Assigned all content to news section as fallback");
     }
   }
   
-  // Final check - if we have any content but haven't extracted sections, log this for debugging
-  if (cleanContent && Object.keys(result).length === 0) {
-    console.warn("Failed to extract any sections from content:", cleanContent);
-  }
+  // Final check - ensure we didn't get empty strings
+  Object.keys(result).forEach(key => {
+    if (result[key as keyof NewsletterSections]?.trim() === '') {
+      delete result[key as keyof NewsletterSections];
+    }
+  });
   
   console.log("Final extracted sections:", {
     newsFound: !!result.news,
@@ -208,7 +237,7 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     }
 
     const data = await response.json();
-    console.log("Raw response data:", data);
+    console.log("Raw response data:", JSON.stringify(data).substring(0, 500) + "...");
     
     // For regenerate actions, handle targeted section response
     if (request.action) {
@@ -244,6 +273,15 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
         }
       }
       
+      // If we can't find the section directly, try to extract it from the whole response
+      console.log("Attempting to extract section from whole response");
+      const extractedSections = extractSectionsFromContent(JSON.stringify(data));
+      if (extractedSections[section]) {
+        const result: Partial<NewsletterSections> = {};
+        result[section] = extractedSections[section];
+        return result;
+      }
+      
       console.warn(`Could not find content for ${section} regeneration`);
       return {};
     }
@@ -266,7 +304,11 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     for (const field of potentialFields) {
       if (data[field] && typeof data[field] === 'string') {
         console.log(`Found content in ${field} field, extracting sections`);
-        return extractSectionsFromContent(data[field]);
+        const extracted = extractSectionsFromContent(data[field]);
+        if (Object.keys(extracted).length > 0) {
+          console.log("Successfully extracted sections from field:", field);
+          return extracted;
+        }
       }
     }
     
@@ -274,7 +316,11 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     for (const [key, value] of Object.entries(data)) {
       if (typeof value === 'string' && value.trim().length > 0) {
         console.log(`Using string content from ${key} field`);
-        return extractSectionsFromContent(value);
+        const extracted = extractSectionsFromContent(value);
+        if (Object.keys(extracted).length > 0) {
+          console.log("Successfully extracted sections from field:", key);
+          return extracted;
+        }
       }
     }
     
@@ -285,14 +331,11 @@ export const generateNewsletter = async (request: NewsletterRequest): Promise<Pa
     }
     
     // Last resort: stringify the entire response and try to extract from that
-    try {
-      const dataString = JSON.stringify(data);
-      if (dataString && dataString !== '{}' && dataString !== '[]') {
-        console.log("Attempting extraction from stringified response");
-        return extractSectionsFromContent(dataString);
-      }
-    } catch (e) {
-      console.error("Error stringifying response:", e);
+    console.log("Attempting extraction from stringified response");
+    const extracted = extractSectionsFromContent(JSON.stringify(data));
+    if (Object.keys(extracted).length > 0) {
+      console.log("Successfully extracted sections from stringified response");
+      return extracted;
     }
     
     console.warn("Failed to extract any content from the response");

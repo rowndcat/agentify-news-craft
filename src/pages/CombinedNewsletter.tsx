@@ -207,23 +207,6 @@ const CombinedNewsletter = () => {
     return tempElement.textContent || tempElement.innerText || html;
   };
 
-  // Function to extract URL from text that contains markdown links
-  const extractLinkFromResponse = (text: string): string | null => {
-    // Look for markdown link pattern [title](url)
-    const markdownLinkRegex = /\[.*?\]\((.*?)\)/;
-    const markdownMatch = text.match(markdownLinkRegex);
-    
-    if (markdownMatch && markdownMatch[1]) {
-      return markdownMatch[1];
-    }
-    
-    // If no markdown link, look for a regular URL
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const urlMatch = text.match(urlRegex);
-    
-    return urlMatch ? urlMatch[0] : null;
-  };
-
   // Function to handle document creation
   const createDocument = async () => {
     setIsCreating(true);
@@ -275,39 +258,15 @@ const CombinedNewsletter = () => {
       const result = await response.json();
       console.log("Document created:", result);
       
-      // Check for documentLink in result
-      if (result) {
-        let link = null;
-        
-        // Check various possible locations for the link
-        if (result.documentLink) {
-          // Direct property
-          link = result.documentLink;
-        } else if (result.output) {
-          // Embedded in output text
-          link = extractLinkFromResponse(result.output);
-        } else if (result.content) {
-          // Embedded in content
-          link = extractLinkFromResponse(result.content);
-        } else if (typeof result === 'string') {
-          // Directly in result as string
-          link = extractLinkFromResponse(result);
-        }
-        
-        if (link) {
-          // Set document link and show dialog
-          setDocumentLink(link);
-          setShowDocumentDialog(true);
-          toast.success("Newsletter document created successfully!");
-        } else {
-          // Handle case where link extraction failed
-          console.error("Document created but couldn't extract link from response:", result);
-          toast.error("Document created but link extraction failed. Please check the console logs.");
-        }
+      if (result && result.documentLink) {
+        // Set document link and show dialog
+        setDocumentLink(result.documentLink);
+        setShowDocumentDialog(true);
+        toast.success("Newsletter document created successfully!");
       } else {
-        // Handle case where result is missing
-        console.error("Document created but response is empty:", result);
-        toast.error("Document created but response is missing. Please check your console logs.");
+        // Handle case where link is missing
+        console.error("Document created but no link was returned:", result);
+        toast.error("Document created but link is missing. Please check your console logs.");
       }
     } catch (error) {
       console.error("Error creating document:", error);

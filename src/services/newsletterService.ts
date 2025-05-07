@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -51,6 +50,87 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
       await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
       
       return getMockData(payload);
+    }
+    
+    throw error;
+  }
+};
+
+/**
+ * Regenerate a specific section of the newsletter
+ */
+export const regenerateSection = async (
+  section: 'news' | 'markets' | 'copilot', 
+  chatId: string,
+  instructions?: string
+): Promise<string> => {
+  try {
+    const payload = {
+      action: `regenerate_${section}`,
+      chatId,
+      instructions
+    };
+    
+    console.log(`Regenerating ${section} section with payload:`, payload);
+    
+    // In a real app, this would be a fetch call to your AI service
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_API_KEY || 'demo-key'}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(`Regenerated ${section} content:`, data);
+    
+    // Try multiple content extraction strategies
+    let sectionContent = "";
+    
+    if (data[section]) {
+      // Direct section property
+      sectionContent = data[section];
+    } else if (data.content && data.content[section]) {
+      // Nested content object
+      sectionContent = data.content[section];
+    } else if (data.sections && data.sections[section]) {
+      // Nested sections object
+      sectionContent = data.sections[section];
+    }
+    
+    // If we still don't have content, return empty string
+    if (!sectionContent && import.meta.env.DEV) {
+      console.log("Using mock data for regenerated section");
+      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      
+      const mockData = getMockData({
+        action: `regenerate_${section}`,
+        instructions
+      });
+      
+      return mockData[section] || "";
+    }
+    
+    return sectionContent || "";
+  } catch (error) {
+    console.error(`Error regenerating ${section} section:`, error);
+    
+    if (import.meta.env.DEV) {
+      console.log("Using mock data for regenerated section");
+      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      
+      const mockData = getMockData({
+        action: `regenerate_${section}`,
+        instructions
+      });
+      
+      return mockData[section] || "";
     }
     
     throw error;

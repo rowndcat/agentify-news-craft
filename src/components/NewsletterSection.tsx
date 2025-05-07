@@ -1,5 +1,6 @@
+
 import React, { useState } from "react";
-import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X } from "lucide-react";
+import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ interface NewsletterSectionProps {
   isLoading: boolean;
   onRegenerate: (instructions?: string) => void;
   icon: "news" | "markets" | "insights";
+  imageUrl?: string | null;
 }
 
 // Function to format markdown text to HTML
@@ -142,6 +144,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   isLoading,
   onRegenerate,
   icon,
+  imageUrl = null,
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
@@ -177,6 +180,20 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     onRegenerate(undefined);
     setIsDialogOpen(false);
     setInstructions("");
+  };
+
+  // New function to handle image download
+  const handleDownloadImage = () => {
+    if (!imageUrl) return;
+    
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `${title.toLowerCase().replace(/\s+/g, '-')}-image.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`${title} image downloaded successfully!`);
   };
 
   const renderIcon = () => {
@@ -246,6 +263,46 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             </Button>
           </div>
         </div>
+
+        {/* Image box */}
+        <div className="px-6 pt-4">
+          <div className="bg-gray-100 rounded-md border border-gray-200 p-2 mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-1 text-sm font-medium text-gray-600">
+                <Image size={16} />
+                <span>Section Image</span>
+              </div>
+              <Button 
+                onClick={handleDownloadImage} 
+                variant="ghost" 
+                size="sm"
+                disabled={!imageUrl}
+                className="h-8 px-2 flex items-center gap-1 text-xs"
+                title="Download image"
+              >
+                <Download size={16} />
+                <span>Download</span>
+              </Button>
+            </div>
+            <div 
+              className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
+            >
+              {imageUrl ? (
+                <img 
+                  src={imageUrl} 
+                  alt={`${title} visual`} 
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-gray-400 flex flex-col items-center">
+                  <Image size={24} strokeWidth={1.5} />
+                  <span className="text-xs mt-1">No image available</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <ScrollArea className="section-content font-tiempos h-[300px]">
           {isLoading ? (
             <div className="flex flex-col gap-3">
@@ -285,6 +342,23 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
           </div>
           <ScrollArea className="h-[calc(100vh-4rem)] p-6 md:p-8 lg:p-12 font-tiempos">
             <div className="max-w-4xl mx-auto">
+              {imageUrl && (
+                <div className="mb-8 relative">
+                  <img 
+                    src={imageUrl} 
+                    alt={`${title} visual`} 
+                    className="w-full rounded-lg shadow-md"
+                  />
+                  <Button 
+                    onClick={handleDownloadImage}
+                    className="absolute top-4 right-4 bg-white/80 hover:bg-white text-gray-800 shadow-md"
+                    size="sm"
+                  >
+                    <Download size={16} className="mr-1" />
+                    Download
+                  </Button>
+                </div>
+              )}
               <div 
                 className="newsletter-content text-lg" 
                 dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }}

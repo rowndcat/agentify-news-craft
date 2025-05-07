@@ -19,6 +19,17 @@ const Index = () => {
     copilot: "",
   });
   
+  // State for image URLs
+  const [imageUrls, setImageUrls] = useState<{
+    news: string | null;
+    markets: string | null;
+    copilot: string | null;
+  }>({
+    news: null,
+    markets: null,
+    copilot: null,
+  });
+  
   const [isLoading, setIsLoading] = useState<{
     all: boolean;
     news: boolean;
@@ -52,12 +63,24 @@ const Index = () => {
       if (result.markets) console.log("Markets content received:", result.markets.substring(0, 100) + "...");
       if (result.copilot) console.log("Copilot content received:", result.copilot.substring(0, 100) + "...");
       
+      // Check for image URLs in the response
+      if (result.newsImage) console.log("News image URL received:", result.newsImage);
+      if (result.marketsImage) console.log("Markets image URL received:", result.marketsImage);
+      if (result.copilotImage) console.log("Copilot image URL received:", result.copilotImage);
+      
       if (result) {
         // Force state update with the received sections, with fallbacks to prevent empty updates
         setContent({
           news: result.news || "",
           markets: result.markets || "",
           copilot: result.copilot || "",
+        });
+        
+        // Update image URLs
+        setImageUrls({
+          news: result.newsImage || null,
+          markets: result.marketsImage || null,
+          copilot: result.copilotImage || null,
         });
         
         // Check if any content was actually returned
@@ -96,12 +119,26 @@ const Index = () => {
       console.log(`${section} result type:`, typeof result);
       console.log(`${section} received content:`, result[section] ? result[section].substring(0, 100) + "..." : "No content");
       
+      // Check for image URL in the response
+      if (result[`${section}Image`]) {
+        console.log(`${section} image URL received:`, result[`${section}Image`]);
+      }
+      
       if (result && result[section]) {
         // Force state update with only the specified section
         setContent(prev => ({
           ...prev,
           [section]: result[section],
         }));
+        
+        // Update image URL for this section if provided
+        if (result[`${section}Image`]) {
+          setImageUrls(prev => ({
+            ...prev,
+            [section]: result[`${section}Image`],
+          }));
+        }
+        
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated!`);
       } else {
         console.error(`No content returned for ${section} section:`, result);
@@ -122,8 +159,12 @@ const Index = () => {
       return;
     }
     
-    // Store the content in sessionStorage to pass to the combined page
-    sessionStorage.setItem('combinedNewsletter', JSON.stringify(content));
+    // Store the content and image URLs in sessionStorage to pass to the combined page
+    sessionStorage.setItem('combinedNewsletter', JSON.stringify({
+      content,
+      imageUrls
+    }));
+    
     navigate('/combined');
   };
 
@@ -205,6 +246,7 @@ const Index = () => {
             isLoading={isLoading.news}
             onRegenerate={(instructions) => handleRegenerateSection("news", instructions)}
             icon="news"
+            imageUrl={imageUrls.news}
           />
           
           <NewsletterSection
@@ -213,6 +255,7 @@ const Index = () => {
             isLoading={isLoading.markets}
             onRegenerate={(instructions) => handleRegenerateSection("markets", instructions)}
             icon="markets"
+            imageUrl={imageUrls.markets}
           />
           
           <NewsletterSection
@@ -221,6 +264,7 @@ const Index = () => {
             isLoading={isLoading.copilot}
             onRegenerate={(instructions) => handleRegenerateSection("copilot", instructions)}
             icon="insights"
+            imageUrl={imageUrls.copilot}
           />
         </div>
       </main>

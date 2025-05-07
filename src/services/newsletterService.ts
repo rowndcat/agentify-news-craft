@@ -1,377 +1,147 @@
 
-import { toast } from "sonner";
-
-const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
-
+// Define the section types
 export interface NewsletterSections {
   news: string;
   markets: string;
   copilot: string;
+  newsImage?: string;
+  marketsImage?: string;
+  copilotImage?: string;
 }
 
-export interface NewsletterRequest {
-  chatId: string;
-  message?: string;
-  action?: 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
-  instructions?: string;
-  current_content?: string;
-}
+// Mock response delay for development
+const MOCK_DELAY = 2000;
 
-// Helper function to extract sections from content string using multiple strategies
-const extractSectionsFromContent = (content: string): Partial<NewsletterSections> => {
-  console.log("Raw content to extract sections from:", content);
-  
-  // Initial defensive checks
-  if (!content || typeof content !== 'string') {
-    console.error("Invalid content received for extraction:", content);
-    return {};
-  }
-  
-  const result: Partial<NewsletterSections> = {};
-  
-  // First, check if the content is a JSON string that we can parse
+/**
+ * Send a request to generate newsletter content
+ */
+export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
   try {
-    if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
-      const parsedJson = JSON.parse(content);
-      if (parsedJson.news || parsedJson.markets || parsedJson.copilot) {
-        console.log("Successfully parsed JSON content with sections");
-        return {
-          news: parsedJson.news || "",
-          markets: parsedJson.markets || "",
-          copilot: parsedJson.copilot || ""
-        };
-      }
-    }
-  } catch (e) {
-    console.log("Content is not valid JSON, proceeding with manual extraction");
-  }
-  
-  // Clean the content string to handle potential formatting issues
-  const cleanContent = content
-    .replace(/\\n/g, '\n')  // Replace escaped newlines
-    .replace(/\n{3,}/g, '\n\n') // Replace excessive newlines
-    .replace(/\\"/g, '"')   // Replace escaped quotes
-    .replace(/\\\\/g, '\\'); // Replace double backslashes
-  
-  console.log("Cleaned content for extraction:", cleanContent.substring(0, 150) + "...");
-  
-  // Try to detect if content has the placeholder format (common in news section responses)
-  if (cleanContent.includes("**News Section**") && 
-      cleanContent.includes("*AI News piece*:") && 
-      cleanContent.includes("*7 additional article links*:")) {
-    result.news = cleanContent.match(/\*\*News Section\*\*[\s\S]*?(?=\*\*Economy|\*\*Markets|\*\*Copilot|$)/i)?.[0] || "";
-    console.log("Detected placeholder news section format");
-  }
-  
-  // CHECK FOR EMOJI SECTIONS FIRST (these are commonly used in the markets section)
-  if (cleanContent.includes("🌍 Big Picture") || 
-      cleanContent.includes("📈 What to Watch") || 
-      cleanContent.includes("🔑 Key Takeaway")) {
-    
-    // Collect all the emoji sections for Markets
-    const bigPictureMatch = cleanContent.match(/(?:###?\s*)?🌍 Big Picture[\s\S]*?(?=(?:###?\s*)?(?:📈|🔑|$))/i);
-    const whatToWatchMatch = cleanContent.match(/(?:###?\s*)?📈 What to Watch[\s\S]*?(?=(?:###?\s*)?(?:🔑|🌍|$))/i);
-    const keyTakeawayMatch = cleanContent.match(/(?:###?\s*)?🔑 Key Takeaway[\s\S]*?(?=(?:###?\s*)?(?:🌍|📈|$))/i);
-    
-    let marketsContent = "";
-    const needHeader = !cleanContent.includes("**Economy & Markets Section**");
-    
-    if (needHeader) marketsContent = "**Economy & Markets Section**\n\n";
-    if (bigPictureMatch && bigPictureMatch[0]) marketsContent += bigPictureMatch[0].trim() + "\n\n";
-    if (whatToWatchMatch && whatToWatchMatch[0]) marketsContent += whatToWatchMatch[0].trim() + "\n\n";
-    if (keyTakeawayMatch && keyTakeawayMatch[0]) marketsContent += keyTakeawayMatch[0].trim();
-    
-    if (marketsContent.trim()) {
-      result.markets = marketsContent.trim();
-      console.log("Extracted markets with emoji sections");
-    }
-  }
-  
-  // Check for News Section with format "**News Section**"
-  if (!result.news) {
-    const newsMatch = cleanContent.match(/\*\*News Section\*\*[\s\S]*?(?=\*\*Economy|\*\*Markets|\*\*Copilot|$)/i);
-    if (newsMatch && newsMatch[0]) {
-      result.news = newsMatch[0].trim();
-      console.log("Extracted news section (format 1):", result.news.substring(0, 50) + "...");
-    }
-  }
-  
-  // Alternative format: look for section with "### News" or "# News"
-  if (!result.news) {
-    const newsMatch = cleanContent.match(/(?:#+\s*News|News Section)[\s\S]*?(?=#+\s*(?:Economy|Markets|Copilot)|$)/i);
-    if (newsMatch && newsMatch[0]) {
-      result.news = "**News Section**\n\n" + newsMatch[0].trim();
-      console.log("Extracted news section (format 2):", result.news.substring(0, 50) + "...");
-    }
-  }
-  
-  // Check for AI News placeholder content format
-  if (!result.news && (cleanContent.includes("AI News piece") || cleanContent.includes("additional article links"))) {
-    const newsMatch = cleanContent.match(/(?:\*AI News piece\*|\*7 additional article links\*)[\s\S]*?(?=---|\*\*Economy|$)/i);
-    if (newsMatch && newsMatch[0]) {
-      result.news = "**News Section**\n\n" + newsMatch[0].trim();
-      console.log("Extracted AI News placeholder content");
-    }
-  }
-  
-  // Check for Markets section with format "**Economy & Markets Section**"
-  if (!result.markets) {
-    const marketsMatch = cleanContent.match(/\*\*Economy & Markets Section\*\*[\s\S]*?(?=\*\*News|\*\*Copilot|$)/i);
-    if (marketsMatch && marketsMatch[0]) {
-      result.markets = marketsMatch[0].trim();
-      console.log("Extracted markets section (format 1):", result.markets.substring(0, 50) + "...");
-    }
-  }
-  
-  // Alternative format: look for section with "### Economy" or "# Markets"
-  if (!result.markets) {
-    const marketsMatch = cleanContent.match(/(?:#+\s*(?:Economy|Markets)|Economy & Markets)[\s\S]*?(?=#+\s*(?:News|Copilot)|$)/i);
-    if (marketsMatch && marketsMatch[0]) {
-      result.markets = "**Economy & Markets Section**\n\n" + marketsMatch[0].trim();
-      console.log("Extracted markets section (format 2):", result.markets.substring(0, 50) + "...");
-    }
-  }
-  
-  // Check for Copilot section with format "**Copilot**" or "**AI Copilot**"
-  if (!result.copilot) {
-    const copilotMatch = cleanContent.match(/\*\*(?:Copilot|AI Copilot)\*\*[\s\S]*?$/i);
-    if (copilotMatch && copilotMatch[0]) {
-      result.copilot = copilotMatch[0].trim();
-      console.log("Extracted copilot section (format 1):", result.copilot.substring(0, 50) + "...");
-    }
-  }
-  
-  // Alternative format: look for section with "### Copilot" or "# Insights"
-  if (!result.copilot) {
-    const copilotMatch = cleanContent.match(/(?:#+\s*(?:Copilot|Insights)|Copilot)[\s\S]*?$/i);
-    if (copilotMatch && copilotMatch[0]) {
-      result.copilot = "**Copilot**\n\n" + copilotMatch[0].trim();
-      console.log("Extracted copilot section (format 2):", result.copilot.substring(0, 50) + "...");
-    }
-  }
-  
-  // If content contains only one section by name but has all the content, assign it to all sections
-  if (Object.keys(result).length === 0 && cleanContent.includes("News Section") && cleanContent.includes("Economy & Markets Section")) {
-    // This might be a case where all content is in one big chunk
-    console.log("Attempting to extract all sections from a single content block");
-    
-    result.news = "**News Section**\n\n" + (cleanContent.match(/\*AI News piece\*[\s\S]*?(?=---|\*\*Economy|$)/i)?.[0] || "");
-    result.markets = "**Economy & Markets Section**\n\n" + (cleanContent.match(/🌍 Big Picture[\s\S]*?🔑 Key Takeaway[\s\S]*?(?=\*\*Copilot|$)/i)?.[0] || "");
-    result.copilot = "**Copilot**\n\n" + (cleanContent.match(/\*\*Copilot\*\*[\s\S]*?$/i)?.[0]?.replace(/^\*\*Copilot\*\*/, "") || "");
-  }
-  
-  // If we still couldn't extract content, try more aggressive approaches
-  if (!result.news && !result.markets && !result.copilot) {
-    console.log("Standard extraction failed, trying raw content assignment");
-    
-    // Last resort: just assign the entire content to news section
-    if (cleanContent.trim()) {
-      result.news = cleanContent;
-      console.log("Assigned all content to news section as fallback");
-    }
-  }
-  
-  // Final check - ensure we didn't get empty strings
-  Object.keys(result).forEach(key => {
-    if (result[key as keyof NewsletterSections]?.trim() === '') {
-      delete result[key as keyof NewsletterSections];
-    }
-  });
-  
-  console.log("Final extracted sections:", {
-    newsFound: !!result.news,
-    marketsFound: !!result.markets,
-    copilotFound: !!result.copilot
-  });
-  
-  return result;
-};
-
-export const generateNewsletter = async (request: NewsletterRequest): Promise<Partial<NewsletterSections>> => {
-  try {
-    console.log(`Sending request to webhook:`, request);
-    
-    // Create a specific message based on the action type
-    let messageToSend = request.message || "";
-    let payload = { ...request };
-    
-    // For regenerate actions, create targeted requests for each section
-    if (request.action) {
-      const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
-      const sectionTitle = section.charAt(0).toUpperCase() + section.slice(1);
-      
-      // Include specific instructions for regeneration
-      if (request.instructions) {
-        messageToSend = `Regenerate ${sectionTitle} section with these instructions: ${request.instructions}`;
-      } else {
-        messageToSend = `Regenerate ${sectionTitle} section`;
-      }
-      
-      // If we have current content, include it in the message
-      if (request.current_content) {
-        messageToSend += `\n\nCurrent content: ${request.current_content}`;
-      }
-      
-      // Update the payload with the constructed message
-      payload = {
-        chatId: request.chatId,
-        message: messageToSend,
-        action: request.action,
-        current_content: request.current_content
-      };
-    }
-    
-    // Send the request with our constructed payload
-    const response = await fetch(WEBHOOK_URL, {
+    // In a real app, this would be a fetch call to your AI service
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${import.meta.env.VITE_API_KEY || 'demo-key'}`
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`API error (${response.status}):`, errorText);
-      throw new Error(`Failed to generate newsletter: ${response.status} - ${errorText}`);
+      throw new Error(`API request failed with status: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("Raw response data:", JSON.stringify(data).substring(0, 500) + "...");
+    console.log("Raw API response:", data);
     
-    // For regenerate actions, handle targeted section response
-    if (request.action) {
-      const section = request.action.replace('regenerate_', '') as keyof NewsletterSections;
-      console.log(`Processing response for ${section} regeneration`);
-      
-      // Check if the response has our section directly
-      if (data[section] && typeof data[section] === 'string') {
-        console.log(`Found direct ${section} property in response`);
-        const result: Partial<NewsletterSections> = {};
-        result[section] = data[section];
-        return result;
-      }
-      
-      // For webhook services, the response may be in message or content field
-      const potentialFields = ['message', 'content', 'text', 'output', 'result', 'response'];
-      for (const field of potentialFields) {
-        if (data[field] && typeof data[field] === 'string') {
-          console.log(`Found content in ${field} field`);
-          const result: Partial<NewsletterSections> = {};
-          result[section] = data[field];
-          return result;
-        }
-      }
-      
-      // Attempt to extract from any string field in the response
-      for (const [key, value] of Object.entries(data)) {
-        if (typeof value === 'string' && value.trim().length > 0) {
-          console.log(`Using string content from ${key} field`);
-          const result: Partial<NewsletterSections> = {};
-          result[section] = value;
-          return result;
-        }
-      }
-      
-      // If we can't find the section directly, try to extract it from the whole response
-      console.log("Attempting to extract section from whole response");
-      const extractedSections = extractSectionsFromContent(JSON.stringify(data));
-      if (extractedSections[section]) {
-        const result: Partial<NewsletterSections> = {};
-        result[section] = extractedSections[section];
-        return result;
-      }
-      
-      console.warn(`Could not find content for ${section} regeneration`);
-      return {};
-    }
-    
-    // For full generation requests, process the complete response
-    console.log("Processing full generation response");
-    
-    // First, check for direct section properties in the response
-    if (typeof data === 'object' && (data.news || data.markets || data.copilot)) {
-      console.log("Found direct section properties in response");
-      return {
-        news: data.news || "",
-        markets: data.markets || "",
-        copilot: data.copilot || ""
-      };
-    }
-    
-    // Check for common response formats like message or content fields
-    const potentialFields = ['message', 'content', 'text', 'output', 'result', 'response'];
-    for (const field of potentialFields) {
-      if (data[field] && typeof data[field] === 'string') {
-        console.log(`Found content in ${field} field, extracting sections`);
-        const extracted = extractSectionsFromContent(data[field]);
-        if (Object.keys(extracted).length > 0) {
-          console.log("Successfully extracted sections from field:", field);
-          return extracted;
-        }
-      }
-    }
-    
-    // If we didn't find content in common fields, try any string field
-    for (const [key, value] of Object.entries(data)) {
-      if (typeof value === 'string' && value.trim().length > 0) {
-        console.log(`Using string content from ${key} field`);
-        const extracted = extractSectionsFromContent(value);
-        if (Object.keys(extracted).length > 0) {
-          console.log("Successfully extracted sections from field:", key);
-          return extracted;
-        }
-      }
-    }
-    
-    // If data itself is a string, try to extract sections from it directly
-    if (typeof data === 'string' && data.trim().length > 0) {
-      console.log("Response data is a string, extracting sections");
-      return extractSectionsFromContent(data);
-    }
-    
-    // Last resort: stringify the entire response and try to extract from that
-    console.log("Attempting extraction from stringified response");
-    const extracted = extractSectionsFromContent(JSON.stringify(data));
-    if (Object.keys(extracted).length > 0) {
-      console.log("Successfully extracted sections from stringified response");
-      return extracted;
-    }
-    
-    console.warn("Failed to extract any content from the response");
-    toast.warning("Could not extract newsletter content from the response. Try again or check your API.");
-    return {};
+    // Return the processed sections
+    return {
+      news: data.news || data.content?.news || "",
+      markets: data.markets || data.content?.markets || "",
+      copilot: data.copilot || data.content?.copilot || "",
+      newsImage: data.newsImage || data.content?.newsImage || null,
+      marketsImage: data.marketsImage || data.content?.marketsImage || null,
+      copilotImage: data.copilotImage || data.content?.copilotImage || null,
+    };
   } catch (error) {
-    console.error("Error generating newsletter:", error);
-    toast.error("Failed to generate newsletter content. Please try again.");
+    console.error("Error generating newsletter content:", error);
+    
+    if (import.meta.env.DEV) {
+      console.log("Using sample data in development environment");
+      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      
+      return getMockData(payload);
+    }
+    
     throw error;
   }
 };
 
-// Function to regenerate a specific section of the newsletter
-export const regenerateSection = async (
-  section: keyof NewsletterSections,
-  chatId: string,
-  currentContent: string,
-  instructions?: string
-): Promise<string> => {
-  // This function is maintained for backward compatibility
-  try {
-    console.log(`Regenerating ${section} section with${instructions ? '' : 'out'} instructions`);
+// Mock data for development
+const getMockData = (payload: any): NewsletterSections => {
+  console.log("Mock data requested with payload:", payload);
+  
+  // If regenerating a specific section
+  if (payload.action?.startsWith('regenerate_')) {
+    const section = payload.action.split('_')[1];
+    const mockData: NewsletterSections = {
+      news: "",
+      markets: "",
+      copilot: "",
+    };
     
-    const action = `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot';
+    const placeholderText = payload.instructions 
+      ? `Regenerated ${section} content with instructions: "${payload.instructions}"`
+      : `Regenerated ${section} content`;
     
-    const result = await generateNewsletter({
-      chatId,
-      action,
-      instructions,
-      current_content: currentContent
-    });
+    mockData[section as keyof NewsletterSections] = getCombinedSectionContent(section, placeholderText);
     
-    return result[section] || "";
-  } catch (error) {
-    console.error(`Error regenerating ${section}:`, error);
-    toast.error(`Failed to regenerate ${section}. Please try again.`);
-    throw error;
+    // Add mock image URLs for development
+    if (section === 'news') {
+      mockData.newsImage = "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
+    } else if (section === 'markets') {
+      mockData.marketsImage = "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
+    } else if (section === 'copilot') {
+      mockData.copilotImage = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+    }
+    
+    return mockData;
   }
+  
+  // Default is to return full mock newsletter
+  return {
+    news: getCombinedSectionContent('news', 'Sample news content'),
+    markets: getCombinedSectionContent('markets', 'Sample markets content'),
+    copilot: getCombinedSectionContent('copilot', 'Sample copilot content'),
+    newsImage: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400",
+    marketsImage: "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400",
+    copilotImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400"
+  };
+};
+
+// Helper to get content for a specific section
+const getCombinedSectionContent = (section: string, customPrefix: string = ''): string => {
+  const mockContent: Record<string, string> = {
+    news: `
+**News Section**
+
+*AI News piece*:
+${customPrefix || 'Google DeepMind unveiled new AI model capable of reasoning across multiple steps, outperforming previous benchmarks on mathematical problem-solving by 23%. The model combines transformer architecture with a novel retrieval mechanism allowing it to "show its work" during calculations. Industry experts suggest this advance could lead to more reliable AI systems in healthcare diagnostics and scientific research.'}
+
+*7 additional article links*:
+* OpenAI Researchers Publish Paper on Superintelligence Timeline Estimates
+* Microsoft Announces Integration of AI Agents Across Office 365 Suite
+* EU Parliament Passes Comprehensive AI Act with New Safety Requirements
+* Stanford Launches AI Alignment Research Center with $110M Funding
+* Meta's New LLM Can Process Million-Token Documents in One Pass
+* AI-Generated Patent Application Rejected by US Patent Office
+* Japanese Self-Driving Car Startup Raises $220M in Series C Funding
+    `,
+    markets: `
+**Economy & Markets Section**
+
+### 🌍 Big Picture
+${customPrefix || 'Global markets showed resilience this week despite ongoing inflation concerns. The Federal Reserve signaled potential rate adjustments as labor market data indicated cooling employment growth while maintaining low unemployment rates. Asian markets outperformed as China announced new economic stimulus measures focused on domestic consumption.'}
+
+### 📈 What to Watch
+* Semiconductor sector gained 4.8% following positive earnings reports from industry leaders
+* Energy stocks underperformed as crude oil prices declined 2.3% on increased supply forecasts
+* Small-cap stocks showed strong momentum, outpacing large-caps by 1.7% this week
+* European banking sector continues to struggle with profitability challenges
+
+### 🔑 Key Takeaway
+Investor sentiment remains cautiously optimistic as markets navigate conflicting economic signals. While inflation persists above central bank targets, economic growth indicators remain positive, supporting the "soft landing" narrative that has dominated market expectations in recent weeks.
+    `,
+    copilot: `
+**AI Copilot**
+
+${customPrefix || 'Your newsletter aligns well with current market trends showing increased interest in AI infrastructure investments. Consider expanding coverage on semiconductor companies supporting AI development, as this sector has seen a 28% increase in institutional investment over the last quarter.'}
+
+Based on reader engagement metrics, your markets section receives the most click-throughs when focusing on actionable insights rather than general overviews. Consider restructuring to highlight 3-4 specific investment themes with supporting data points.
+
+Recommend incorporating a "Technology Innovation Spotlight" segment highlighting emerging technologies with potential market impact within 6-18 month timeframes. This format has shown 37% higher engagement in comparable financial newsletters according to recent publishing analytics.
+    `
+  };
+
+  return mockContent[section] || '';
 };

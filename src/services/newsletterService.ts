@@ -57,6 +57,77 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
   }
 };
 
+/**
+ * Regenerate a specific section of the newsletter
+ */
+export const regenerateSection = async (
+  section: 'news' | 'markets' | 'copilot',
+  chatId: string,
+  instructions?: string
+): Promise<string> => {
+  try {
+    console.log(`Regenerating ${section} with instructions:`, instructions);
+    
+    // Prepare payload for regeneration
+    const payload = {
+      chatId,
+      action: `regenerate_${section}`,
+      instructions
+    };
+    
+    // First try the webhook
+    try {
+      console.log("Sending to webhook:", payload);
+      const webhookResponse = await fetch("https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      if (webhookResponse.ok) {
+        const responseData = await webhookResponse.json();
+        console.log("Webhook response:", responseData);
+        
+        if (responseData && responseData[section]) {
+          return responseData[section];
+        }
+      } else {
+        console.warn("Webhook request failed, falling back to standard API");
+      }
+    } catch (webhookError) {
+      console.error("Error with webhook, falling back to standard API:", webhookError);
+    }
+    
+    // Fallback to the standard generateNewsletter API
+    const result = await generateNewsletter(payload);
+    
+    if (result && result[section]) {
+      return result[section];
+    } else {
+      throw new Error(`No content returned for ${section} section`);
+    }
+  } catch (error) {
+    console.error(`Error regenerating ${section}:`, error);
+    
+    // In development, return mock data
+    if (import.meta.env.DEV) {
+      console.log(`Using mock data for ${section} regeneration`);
+      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      
+      const mockData = getMockData({
+        action: `regenerate_${section}`,
+        instructions
+      });
+      
+      return mockData[section];
+    }
+    
+    throw error;
+  }
+};
+
 // Mock data for development
 const getMockData = (payload: any): NewsletterSections => {
   console.log("Mock data requested with payload:", payload);

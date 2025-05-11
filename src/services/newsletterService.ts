@@ -16,6 +16,7 @@ const MOCK_DELAY = 2000;
  * Send a request to generate newsletter content
  */
 export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
+  console.log("Sending request to generate newsletter with payload:", payload);
   try {
     // In a real app, this would be a fetch call to your AI service
     const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
@@ -46,8 +47,10 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
   } catch (error) {
     console.error("Error generating newsletter content:", error);
     
+    // Check if we're in development mode to use mock data
     if (import.meta.env.DEV) {
       console.log("Using sample data in development environment");
+      // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
       
       return getMockData(payload);
@@ -65,6 +68,7 @@ export const regenerateSection = async (
   chatId: string,
   instructions?: string
 ): Promise<string> => {
+  console.log(`Starting regeneration of ${section} section with chatId: ${chatId}`);
   try {
     const payload = {
       action: `regenerate_${section}`,
@@ -226,4 +230,3 @@ Recommend incorporating a "Technology Innovation Spotlight" segment highlighting
 
   return mockContent[section] || '';
 };
-

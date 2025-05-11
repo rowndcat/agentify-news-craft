@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -12,22 +11,26 @@ export interface NewsletterSections {
 // Mock response delay for development
 const MOCK_DELAY = 2000;
 
+// Set the correct webhook URL
+const WEBHOOK_URL = 'https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat';
+
 /**
  * Send a request to generate newsletter content
  */
 export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
   console.log("Sending request to generate newsletter with payload:", payload);
   try {
-    // In a real app, this would be a fetch call to your AI service
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
+    // Use the direct webhook URL instead of environment variable
+    const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_API_KEY || 'demo-key'}`
       },
       body: JSON.stringify(payload)
     });
 
+    console.log("API Response Status:", response.status);
+    
     if (!response.ok) {
       throw new Error(`API request failed with status: ${response.status}`);
     }
@@ -78,16 +81,17 @@ export const regenerateSection = async (
     
     console.log(`Regenerating ${section} section with payload:`, payload);
     
-    // In a real app, this would be a fetch call to your AI service
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
+    // Use the direct webhook URL instead of environment variable
+    const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_API_KEY || 'demo-key'}`
       },
       body: JSON.stringify(payload)
     });
 
+    console.log("Regeneration API Response Status:", response.status);
+    
     if (!response.ok) {
       throw new Error(`API request failed with status: ${response.status}`);
     }

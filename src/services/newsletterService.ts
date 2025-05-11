@@ -1,3 +1,4 @@
+
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -225,3 +226,4 @@ Recommend incorporating a "Technology Innovation Spotlight" segment highlighting
 
   return mockContent[section] || '';
 };
+

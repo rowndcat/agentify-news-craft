@@ -106,17 +106,13 @@ export const regenerateSection = async (
       return mockData[section];
     }
     
-    // Try the webhook approach first with a timeout
+    // Try the webhook approach with proper error handling
+    console.log("Attempting to send to webhook:", WEBHOOK_URL);
+    console.log("Webhook payload:", JSON.stringify(payload, null, 2));
+    
     try {
-      console.log("Sending to webhook:", payload);
-      
-      // Create a timeout promise
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Webhook request timeout")), 5000);
-      });
-      
-      // Create the fetch promise
-      const fetchPromise = fetch(WEBHOOK_URL, {
+      // Direct fetch with no race condition for better debugging
+      const webhookResponse = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,60 +120,76 @@ export const regenerateSection = async (
         body: JSON.stringify(payload),
       });
       
-      // Race between fetch and timeout
-      const webhookResponse = await Promise.race([
-        fetchPromise, 
-        timeoutPromise
-      ]) as Response; // Type assertion to Response
+      console.log("Webhook response status:", webhookResponse.status);
+      console.log("Webhook response status text:", webhookResponse.statusText);
       
       if (webhookResponse.ok) {
-        const responseData = await webhookResponse.json();
-        console.log("Webhook response:", responseData);
-        
-        if (responseData && responseData[section]) {
-          console.log(`Successfully regenerated ${section} via webhook`);
-          return responseData[section];
-        } else {
-          console.warn("Webhook response missing expected section data");
+        try {
+          const responseData = await webhookResponse.json();
+          console.log("Webhook response data:", responseData);
+          
+          if (responseData && responseData[section]) {
+            console.log(`Successfully regenerated ${section} via webhook`);
+            return responseData[section];
+          } else {
+            console.warn("Webhook response missing expected section data");
+            throw new Error("Invalid webhook response format");
+          }
+        } catch (jsonError) {
+          console.error("Error parsing webhook JSON response:", jsonError);
+          throw new Error("Failed to parse webhook response");
         }
       } else {
         console.warn(`Webhook request failed with status: ${webhookResponse.status}`);
+        throw new Error(`Webhook request failed: ${webhookResponse.statusText}`);
       }
     } catch (webhookError) {
-      console.error("Error with webhook, falling back to standard API:", webhookError);
-    }
-    
-    // Webhook failed or timed out, try the standard API
-    console.log("Fallback to standard API for regeneration");
-    try {
-      const result = await generateNewsletter(payload);
+      console.error("Error with webhook, details:", webhookError);
+      console.log("Falling back to standard API...");
       
-      if (result && result[section]) {
-        console.log(`Successfully regenerated ${section} via standard API`);
-        return result[section];
-      } else {
-        throw new Error(`No content returned for ${section} section from standard API`);
-      }
-    } catch (apiError) {
-      console.error(`Error with standard API regeneration:`, apiError);
-      
-      // If all else fails and we're in development, use mock data
-      if (import.meta.env.DEV) {
-        console.log(`Using mock data for ${section} regeneration`);
-        await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      // Webhook failed, try the standard API
+      try {
+        console.log("Fallback to standard API for regeneration");
+        const result = await generateNewsletter(payload);
         
-        const mockData = getMockData({
-          action: `regenerate_${section}`,
-          instructions
-        });
+        if (result && result[section]) {
+          console.log(`Successfully regenerated ${section} via standard API`);
+          return result[section];
+        } else {
+          throw new Error(`No content returned for ${section} section from standard API`);
+        }
+      } catch (apiError) {
+        console.error(`Error with standard API regeneration:`, apiError);
         
-        return mockData[section];
+        // If all else fails and we're in development, use mock data
+        if (import.meta.env.DEV) {
+          console.log(`Using mock data for ${section} regeneration as final fallback`);
+          await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+          
+          const mockData = getMockData({
+            action: `regenerate_${section}`,
+            instructions
+          });
+          
+          return mockData[section];
+        }
+        
+        throw apiError;
       }
-      
-      throw apiError;
     }
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
+    
+    // Final fallback to mock data in development
+    if (import.meta.env.DEV) {
+      console.log(`DEV mode: Falling back to mock data after all errors`);
+      const mockData = getMockData({
+        action: `regenerate_${section}`,
+        instructions
+      });
+      return mockData[section];
+    }
+    
     throw error;
   }
 };

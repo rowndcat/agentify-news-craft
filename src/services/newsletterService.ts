@@ -1,3 +1,4 @@
+
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -124,8 +125,10 @@ export const regenerateSection = async (
       });
       
       // Race between fetch and timeout
-      // @ts-ignore - TypeScript doesn't like the race with different promise return types
-      const webhookResponse = await Promise.race([fetchPromise, timeoutPromise]);
+      const webhookResponse = await Promise.race([
+        fetchPromise, 
+        timeoutPromise
+      ]) as Response; // Type assertion to Response
       
       if (webhookResponse.ok) {
         const responseData = await webhookResponse.json();

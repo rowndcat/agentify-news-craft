@@ -1,7 +1,8 @@
+
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
-import { generateNewsletter, regenerateSection, NewsletterSections } from "@/services/newsletterService";
+import { generateNewsletter, NewsletterSections } from "@/services/newsletterService";
 import { toast } from "sonner";
 import { ChevronRight, RefreshCw, Sparkles, Files } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -103,25 +104,44 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
     
     try {
-      console.log(`Starting regeneration of ${section} with chatId: ${chatId}`);
-      const sectionContent = await regenerateSection(
-        section as 'news' | 'markets' | 'copilot',
-        chatId,
-        instructions
-      );
+      // Include current content of the section being regenerated
+      const payload = {
+        chatId: chatId,
+        action: `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot',
+        instructions,
+        current_content: content[section] // Include the current section content
+      };
       
-      console.log(`Regenerated ${section} content:`, sectionContent);
+      console.log(`Regenerating ${section} with payload:`, payload);
+      const result = await generateNewsletter(payload);
       
-      if (sectionContent) {
-        // Update only this section
+      console.log(`Regenerate ${section} result:`, result);
+      console.log(`${section} result type:`, typeof result);
+      console.log(`${section} received content:`, result[section] ? result[section].substring(0, 100) + "..." : "No content");
+      
+      // Check for image URL in the response
+      if (result[`${section}Image`]) {
+        console.log(`${section} image URL received:`, result[`${section}Image`]);
+      }
+      
+      if (result && result[section]) {
+        // Force state update with only the specified section
         setContent(prev => ({
           ...prev,
-          [section]: sectionContent,
+          [section]: result[section],
         }));
+        
+        // Update image URL for this section if provided
+        if (result[`${section}Image`]) {
+          setImageUrls(prev => ({
+            ...prev,
+            [section]: result[`${section}Image`],
+          }));
+        }
         
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated!`);
       } else {
-        console.error(`No content returned for ${section} section`);
+        console.error(`No content returned for ${section} section:`, result);
         toast.warning(`No content was returned for the ${section} section. Please try again.`);
       }
     } catch (error) {

@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -111,37 +110,54 @@ export const regenerateSection = async (
     console.log("Webhook payload:", JSON.stringify(payload, null, 2));
     
     try {
-      // Direct fetch with no race condition for better debugging
+      // Use fetch with explicit no-cors mode to help with cross-origin issues
       const webhookResponse = await fetch(WEBHOOK_URL, {
         method: 'POST',
+        mode: 'no-cors', // Add no-cors mode to handle CORS restrictions
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      });
+      }) as Response; // Type assertion here
       
-      console.log("Webhook response status:", webhookResponse.status);
-      console.log("Webhook response status text:", webhookResponse.statusText);
+      console.log("Webhook request completed");
+      console.log("Due to no-cors mode, we won't get response details, assuming success");
       
-      if (webhookResponse.ok) {
-        try {
-          const responseData = await webhookResponse.json();
-          console.log("Webhook response data:", responseData);
-          
-          if (responseData && responseData[section]) {
-            console.log(`Successfully regenerated ${section} via webhook`);
-            return responseData[section];
-          } else {
-            console.warn("Webhook response missing expected section data");
-            throw new Error("Invalid webhook response format");
-          }
-        } catch (jsonError) {
-          console.error("Error parsing webhook JSON response:", jsonError);
-          throw new Error("Failed to parse webhook response");
+      // With no-cors mode, we won't get actual response status or body,
+      // so we'll need to assume success and wait for the regenerated content
+      
+      // Wait a moment for the webhook to process
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Since we can't check the response with no-cors, just try the fallback API
+      console.log("Proceeding with standard API call as backup");
+      try {
+        console.log("Making standard API call for regeneration");
+        const result = await generateNewsletter(payload);
+        
+        if (result && result[section]) {
+          console.log(`Successfully regenerated ${section} via standard API`);
+          return result[section];
+        } else {
+          throw new Error(`No content returned for ${section} section from standard API`);
         }
-      } else {
-        console.warn(`Webhook request failed with status: ${webhookResponse.status}`);
-        throw new Error(`Webhook request failed: ${webhookResponse.statusText}`);
+      } catch (apiError) {
+        console.error(`Error with standard API regeneration:`, apiError);
+        
+        // If all else fails and we're in development, use mock data
+        if (import.meta.env.DEV) {
+          console.log(`Using mock data for ${section} regeneration as final fallback`);
+          await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+          
+          const mockData = getMockData({
+            action: `regenerate_${section}`,
+            instructions
+          });
+          
+          return mockData[section];
+        }
+        
+        throw apiError;
       }
     } catch (webhookError) {
       console.error("Error with webhook, details:", webhookError);

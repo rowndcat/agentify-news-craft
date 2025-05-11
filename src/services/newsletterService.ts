@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -12,22 +11,40 @@ export interface NewsletterSections {
 // Mock response delay for development
 const MOCK_DELAY = 2000;
 
+// API constants
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.agentify360.com';
+const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
+const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
+
 /**
  * Send a request to generate newsletter content
  */
 export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
   try {
-    // In a real app, this would be a fetch call to your AI service
-    const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api.agentify360.com'}/generate-newsletter`, {
+    // In development mode, use mock data for quicker testing
+    if (import.meta.env.DEV) {
+      console.log("DEV mode detected, using mock data with payload:", payload);
+      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      return getMockData(payload);
+    }
+
+    console.log("Sending API request to generate newsletter", {
+      url: `${API_URL}/generate-newsletter`,
+      payload
+    });
+
+    // Make API request
+    const response = await fetch(`${API_URL}/generate-newsletter`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_API_KEY || 'demo-key'}`
+        'Authorization': `Bearer ${API_KEY}`
       },
       body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
+      console.error(`API request failed with status: ${response.status}`);
       throw new Error(`API request failed with status: ${response.status}`);
     }
 
@@ -75,45 +92,9 @@ export const regenerateSection = async (
       instructions
     };
     
-    // First try the webhook
-    try {
-      console.log("Sending to webhook:", payload);
-      const webhookResponse = await fetch("https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      if (webhookResponse.ok) {
-        const responseData = await webhookResponse.json();
-        console.log("Webhook response:", responseData);
-        
-        if (responseData && responseData[section]) {
-          return responseData[section];
-        }
-      } else {
-        console.warn("Webhook request failed, falling back to standard API");
-      }
-    } catch (webhookError) {
-      console.error("Error with webhook, falling back to standard API:", webhookError);
-    }
-    
-    // Fallback to the standard generateNewsletter API
-    const result = await generateNewsletter(payload);
-    
-    if (result && result[section]) {
-      return result[section];
-    } else {
-      throw new Error(`No content returned for ${section} section`);
-    }
-  } catch (error) {
-    console.error(`Error regenerating ${section}:`, error);
-    
-    // In development, return mock data
+    // In development mode, use mock data for quicker testing
     if (import.meta.env.DEV) {
-      console.log(`Using mock data for ${section} regeneration`);
+      console.log(`DEV mode detected, using mock data for ${section} regeneration`);
       await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
       
       const mockData = getMockData({
@@ -124,6 +105,76 @@ export const regenerateSection = async (
       return mockData[section];
     }
     
+    // Try the webhook approach first with a timeout
+    try {
+      console.log("Sending to webhook:", payload);
+      
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Webhook request timeout")), 5000);
+      });
+      
+      // Create the fetch promise
+      const fetchPromise = fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      
+      // Race between fetch and timeout
+      // @ts-ignore - TypeScript doesn't like the race with different promise return types
+      const webhookResponse = await Promise.race([fetchPromise, timeoutPromise]);
+      
+      if (webhookResponse.ok) {
+        const responseData = await webhookResponse.json();
+        console.log("Webhook response:", responseData);
+        
+        if (responseData && responseData[section]) {
+          console.log(`Successfully regenerated ${section} via webhook`);
+          return responseData[section];
+        } else {
+          console.warn("Webhook response missing expected section data");
+        }
+      } else {
+        console.warn(`Webhook request failed with status: ${webhookResponse.status}`);
+      }
+    } catch (webhookError) {
+      console.error("Error with webhook, falling back to standard API:", webhookError);
+    }
+    
+    // Webhook failed or timed out, try the standard API
+    console.log("Fallback to standard API for regeneration");
+    try {
+      const result = await generateNewsletter(payload);
+      
+      if (result && result[section]) {
+        console.log(`Successfully regenerated ${section} via standard API`);
+        return result[section];
+      } else {
+        throw new Error(`No content returned for ${section} section from standard API`);
+      }
+    } catch (apiError) {
+      console.error(`Error with standard API regeneration:`, apiError);
+      
+      // If all else fails and we're in development, use mock data
+      if (import.meta.env.DEV) {
+        console.log(`Using mock data for ${section} regeneration`);
+        await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+        
+        const mockData = getMockData({
+          action: `regenerate_${section}`,
+          instructions
+        });
+        
+        return mockData[section];
+      }
+      
+      throw apiError;
+    }
+  } catch (error) {
+    console.error(`Error regenerating ${section}:`, error);
     throw error;
   }
 };

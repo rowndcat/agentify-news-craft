@@ -1,8 +1,7 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
-import { generateNewsletter, NewsletterSections } from "@/services/newsletterService";
+import { generateNewsletter, regenerateSection, NewsletterSections } from "@/services/newsletterService";
 import { toast } from "sonner";
 import { ChevronRight, RefreshCw, Sparkles, Files } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -55,13 +54,6 @@ const Index = () => {
       const result = await generateNewsletter(payload);
       
       console.log("Generate all result:", result);
-      console.log("Result type:", typeof result);
-      console.log("Result keys:", Object.keys(result));
-      
-      // Debug the actual content received
-      if (result.news) console.log("News content received:", result.news.substring(0, 100) + "...");
-      if (result.markets) console.log("Markets content received:", result.markets.substring(0, 100) + "...");
-      if (result.copilot) console.log("Copilot content received:", result.copilot.substring(0, 100) + "...");
       
       // Check for image URLs in the response
       if (result.newsImage) console.log("News image URL received:", result.newsImage);
@@ -104,44 +96,27 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
     
     try {
-      // Include current content of the section being regenerated
-      const payload = {
-        chatId: chatId,
-        action: `regenerate_${section}` as 'regenerate_news' | 'regenerate_markets' | 'regenerate_copilot',
-        instructions,
-        current_content: content[section] // Include the current section content
-      };
+      console.log(`Regenerating ${section} with instructions:`, instructions);
       
-      console.log(`Regenerating ${section} with payload:`, payload);
-      const result = await generateNewsletter(payload);
+      // Get regenerated section using the regenerateSection function
+      const regeneratedContent = await regenerateSection(
+        section as 'news' | 'markets' | 'copilot',
+        chatId,
+        instructions
+      );
       
-      console.log(`Regenerate ${section} result:`, result);
-      console.log(`${section} result type:`, typeof result);
-      console.log(`${section} received content:`, result[section] ? result[section].substring(0, 100) + "..." : "No content");
+      console.log(`Regenerated ${section} content:`, regeneratedContent ? regeneratedContent.substring(0, 100) + "..." : "No content");
       
-      // Check for image URL in the response
-      if (result[`${section}Image`]) {
-        console.log(`${section} image URL received:`, result[`${section}Image`]);
-      }
-      
-      if (result && result[section]) {
-        // Force state update with only the specified section
+      if (regeneratedContent) {
+        // Update only the specified section
         setContent(prev => ({
           ...prev,
-          [section]: result[section],
+          [section]: regeneratedContent,
         }));
-        
-        // Update image URL for this section if provided
-        if (result[`${section}Image`]) {
-          setImageUrls(prev => ({
-            ...prev,
-            [section]: result[`${section}Image`],
-          }));
-        }
         
         toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section regenerated!`);
       } else {
-        console.error(`No content returned for ${section} section:`, result);
+        console.error(`No content returned for ${section} section`);
         toast.warning(`No content was returned for the ${section} section. Please try again.`);
       }
     } catch (error) {

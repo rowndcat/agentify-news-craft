@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -7,6 +8,7 @@ import { ChevronRight, RefreshCw, Sparkles, Files } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useNavigate } from "react-router-dom";
+import Announcement from "@/components/Announcement";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -48,8 +50,12 @@ const Index = () => {
     copilot: false,
   });
 
+  // Add a state to track when webhook processing is happening
+  const [isWebhookProcessing, setIsWebhookProcessing] = useState(false);
+
   const handleGenerateAll = async () => {
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
+    setIsWebhookProcessing(true);
     
     try {
       // Create the proper payload structure with chatId and message
@@ -62,6 +68,11 @@ const Index = () => {
       
       // Show toast to indicate webhook is being called
       toast.info("Sending request to generate newsletter...");
+      
+      // Update with a more informative toast that explains the waiting process
+      toast.loading("Processing your newsletter request. This may take up to 30 seconds...", {
+        duration: 15000,
+      });
       
       const result = await generateNewsletter(payload);
       
@@ -101,11 +112,13 @@ const Index = () => {
       toast.error("Failed to generate newsletter. Please try again.");
     } finally {
       setIsLoading(prev => ({ ...prev, all: false, news: false, markets: false, copilot: false }));
+      setIsWebhookProcessing(false);
     }
   };
 
   const handleRegenerateSection = async (section: keyof NewsletterSections, instructions?: string) => {
     setIsLoading(prev => ({ ...prev, [section]: true }));
+    setIsWebhookProcessing(true);
     
     try {
       console.log(`Regenerating ${section} with instructions:`, instructions);
@@ -113,6 +126,11 @@ const Index = () => {
       
       // Display toast to indicate webhook is being called
       toast.info(`Sending ${section} regeneration request...`);
+      
+      // Update with a more informative toast that explains the waiting process
+      toast.loading(`Processing your ${section} regeneration. This may take up to 30 seconds...`, {
+        duration: 15000,
+      });
       
       // Get regenerated section using the regenerateSection function
       const regeneratedContent = await regenerateSection(
@@ -140,6 +158,7 @@ const Index = () => {
       toast.error(`Failed to regenerate ${section} section. Please try again.`);
     } finally {
       setIsLoading(prev => ({ ...prev, [section]: false }));
+      setIsWebhookProcessing(false);
     }
   };
 
@@ -166,6 +185,13 @@ const Index = () => {
     <div className="min-h-screen px-4 pb-12">
       <header className="container pt-8 pb-12">
         <div className="max-w-4xl mx-auto">
+          {isWebhookProcessing && (
+            <Announcement 
+              message="Your request is being processed. This may take up to 30 seconds. Please wait..." 
+              type="info"
+            />
+          )}
+          
           <div className="flex flex-col gap-3 items-center text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold text-gradient">
               NewsletterCraft
@@ -185,7 +211,7 @@ const Index = () => {
               </div>
               <Button 
                 onClick={handleGenerateAll} 
-                disabled={isLoading.all}
+                disabled={isLoading.all || isWebhookProcessing}
                 className="button-animation glow min-w-[180px] bg-brand-blue hover:bg-opacity-90 text-white py-6"
                 size="lg"
               >
@@ -238,6 +264,7 @@ const Index = () => {
             onRegenerate={(instructions) => handleRegenerateSection("news", instructions)}
             icon="news"
             imageUrl={imageUrls.news}
+            isWebhookProcessing={isWebhookProcessing}
           />
           
           <NewsletterSection
@@ -247,6 +274,7 @@ const Index = () => {
             onRegenerate={(instructions) => handleRegenerateSection("markets", instructions)}
             icon="markets"
             imageUrl={imageUrls.markets}
+            isWebhookProcessing={isWebhookProcessing}
           />
           
           <NewsletterSection
@@ -256,6 +284,7 @@ const Index = () => {
             onRegenerate={(instructions) => handleRegenerateSection("copilot", instructions)}
             icon="insights"
             imageUrl={imageUrls.copilot}
+            isWebhookProcessing={isWebhookProcessing}
           />
         </div>
       </main>

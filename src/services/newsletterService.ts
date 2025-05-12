@@ -1,3 +1,4 @@
+
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -15,6 +16,11 @@ const MOCK_DELAY = 2000;
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.agentify360.com';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat";
+
+// Webhook timeout configuration
+const WEBHOOK_WAIT_TIME = 15000; // 15 seconds
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000; // 5 seconds
 
 /**
  * Send a request to generate newsletter content
@@ -43,37 +49,61 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
       
       console.log("Webhook request sent, response status:", response.status);
       
-      // Wait for the webhook to process (increased wait time)
-      console.log("Waiting for webhook to process...");
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Wait for the webhook to process with retry mechanism
+      console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);
       
-      // For production, continue with the API request
-      console.log("Sending API request to generate newsletter");
+      // First wait period
+      await new Promise(resolve => setTimeout(resolve, WEBHOOK_WAIT_TIME));
       
-      // Make API request
-      const apiResponse = await fetch(`${API_URL}/generate-newsletter`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
-        },
-        body: JSON.stringify(webhookPayload)
-      });
-      
-      if (apiResponse.ok) {
-        const data = await apiResponse.json();
-        console.log("Raw API response:", data);
-        
-        // Return the processed sections
-        return {
-          news: data.news || data.content?.news || "",
-          markets: data.markets || data.content?.markets || "",
-          copilot: data.copilot || data.content?.copilot || "",
-          newsImage: data.newsImage || data.content?.newsImage || null,
-          marketsImage: data.marketsImage || data.content?.marketsImage || null,
-          copilotImage: data.copilotImage || data.content?.copilotImage || null,
-        };
+      // Try API connection with retries
+      for (let retryCount = 0; retryCount <= MAX_RETRIES; retryCount++) {
+        try {
+          console.log(`Making API request attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+          
+          // Make API request
+          const apiResponse = await fetch(`${API_URL}/generate-newsletter`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify(webhookPayload),
+            // Add a reasonable timeout for the API request
+            signal: AbortSignal.timeout(10000)
+          });
+          
+          if (apiResponse.ok) {
+            const data = await apiResponse.json();
+            console.log("Raw API response:", data);
+            
+            // Return the processed sections
+            return {
+              news: data.news || data.content?.news || "",
+              markets: data.markets || data.content?.markets || "",
+              copilot: data.copilot || data.content?.copilot || "",
+              newsImage: data.newsImage || data.content?.newsImage || null,
+              marketsImage: data.marketsImage || data.content?.marketsImage || null,
+              copilotImage: data.copilotImage || data.content?.copilotImage || null,
+            };
+          } else {
+            console.log(`API attempt ${retryCount + 1} failed with status: ${apiResponse.status}`);
+            
+            // If not the last retry, wait before trying again
+            if (retryCount < MAX_RETRIES) {
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            }
+          }
+        } catch (apiError) {
+          console.error(`API attempt ${retryCount + 1} error:`, apiError);
+          
+          // If not the last retry, wait before trying again
+          if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
+        }
       }
+      
+      console.log("All API attempts failed after webhook processing");
     } catch (webhookError) {
       console.error("Error processing webhook request:", webhookError);
     }
@@ -84,7 +114,7 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
       return getMockData(webhookPayload);
     }
     
-    throw new Error("Failed to get response from webhook and API");
+    throw new Error("Failed to get response from webhook and API after multiple attempts");
   } catch (error) {
     console.error("Error generating newsletter content:", error);
     
@@ -130,23 +160,47 @@ export const regenerateSection = async (
       console.log("Webhook request sent, response status:", response.status);
       
       // Wait longer for the webhook to process
-      console.log("Waiting for webhook to process...");
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);
+      await new Promise(resolve => setTimeout(resolve, WEBHOOK_WAIT_TIME));
       
-      // Try to get a response from the API
-      const apiResponse = await fetch(`${API_URL}/regenerate-section`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
-        },
-        body: JSON.stringify(webhookPayload)
-      });
-      
-      if (apiResponse.ok) {
-        const data = await apiResponse.json();
-        if (data && data[section]) {
-          return data[section];
+      // Try API connection with retries
+      for (let retryCount = 0; retryCount <= MAX_RETRIES; retryCount++) {
+        try {
+          console.log(`Making section API request attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+          
+          // Try to get a response from the API
+          const apiResponse = await fetch(`${API_URL}/regenerate-section`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify(webhookPayload),
+            signal: AbortSignal.timeout(10000)
+          });
+          
+          if (apiResponse.ok) {
+            const data = await apiResponse.json();
+            if (data && data[section]) {
+              return data[section];
+            } else {
+              console.log(`API returned success but no data for section ${section}`);
+            }
+          } else {
+            console.log(`API attempt ${retryCount + 1} failed with status: ${apiResponse.status}`);
+          }
+          
+          // If not the last retry, wait before trying again
+          if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
+        } catch (apiError) {
+          console.error(`API attempt ${retryCount + 1} error:`, apiError);
+          
+          // If not the last retry, wait before trying again
+          if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          }
         }
       }
     } catch (webhookError) {
@@ -163,7 +217,7 @@ export const regenerateSection = async (
       return mockData[section];
     }
     
-    throw new Error(`Failed to regenerate ${section} via webhook and API`);
+    throw new Error(`Failed to regenerate ${section} via webhook and API after multiple attempts`);
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
     

@@ -28,6 +28,7 @@ interface NewsletterSectionProps {
   onRegenerate: (instructions?: string) => void;
   icon: "news" | "markets" | "insights";
   imageUrl?: string | null;
+  isWebhookProcessing?: boolean;
 }
 
 // Function to format markdown text to HTML
@@ -145,6 +146,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   onRegenerate,
   icon,
   imageUrl = null,
+  isWebhookProcessing = false,
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
@@ -166,7 +168,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   };
 
   const handleRegenerateClick = () => {
-    if (isLoading) return;
+    if (isLoading || isWebhookProcessing) return;
     setIsDialogOpen(true);
   };
 
@@ -225,13 +227,19 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
           <div className="flex items-center gap-2">
             {renderIcon()}
             <h2 className="text-lg font-semibold text-white">{title}</h2>
+            {isWebhookProcessing && !isLoading && (
+              <div className="flex items-center gap-1 ml-2">
+                <LoadingSpinner size="xs" />
+                <span className="text-xs text-white/80">Processing...</span>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
               onClick={() => setFullscreenView(true)}
               variant="ghost"
               size="sm"
-              disabled={!hasContent || isLoading}
+              disabled={!hasContent || isLoading || isWebhookProcessing}
               className="button-animation hover:bg-white/20 text-white"
               title="View fullscreen"
             >
@@ -241,7 +249,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               onClick={copyToClipboard}
               variant="ghost"
               size="sm"
-              disabled={!hasContent || isLoading}
+              disabled={!hasContent || isLoading || isWebhookProcessing}
               className="button-animation hover:bg-white/20 text-white"
               title="Copy content"
             >
@@ -251,14 +259,14 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               onClick={handleRegenerateClick}
               variant="ghost"
               size="sm"
-              disabled={isLoading}
-              className={`button-animation hover:bg-white/20 text-white ${isLoading ? 'animate-pulse-light' : ''}`}
-              title="Regenerate section"
+              disabled={isLoading || isWebhookProcessing}
+              className={`button-animation hover:bg-white/20 text-white ${(isLoading || isWebhookProcessing) ? 'animate-pulse-light' : ''}`}
+              title={isWebhookProcessing ? "Waiting for webhook response..." : "Regenerate section"}
             >
               {isLoading ? (
                 <LoadingSpinner size="sm" />
               ) : (
-                <RefreshCw size={18} />
+                <RefreshCw size={18} className={isWebhookProcessing ? "animate-spin opacity-50" : ""} />
               )}
             </Button>
           </div>
@@ -276,7 +284,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 onClick={handleDownloadImage} 
                 variant="ghost" 
                 size="sm"
-                disabled={!imageUrl}
+                disabled={!imageUrl || isWebhookProcessing}
                 className="h-8 px-2 flex items-center gap-1 text-xs"
                 title="Download image"
               >
@@ -293,6 +301,11 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                   alt={`${title} visual`} 
                   className="w-full h-full object-cover"
                 />
+              ) : isWebhookProcessing ? (
+                <div className="text-gray-400 flex flex-col items-center">
+                  <LoadingSpinner size="sm" />
+                  <span className="text-xs mt-1">Processing image...</span>
+                </div>
               ) : (
                 <div className="text-gray-400 flex flex-col items-center">
                   <Image size={24} strokeWidth={1.5} />
@@ -311,6 +324,15 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               <div className="h-4 bg-muted rounded w-2/3"></div>
               <div className="h-4 bg-muted rounded w-4/5"></div>
               <div className="h-4 bg-muted rounded w-3/5"></div>
+            </div>
+          ) : isWebhookProcessing && !hasContent ? (
+            <div className="flex flex-col items-center justify-center h-full py-8">
+              <LoadingSpinner size="md" />
+              <p className="text-gray-600 mt-4 text-center">
+                Waiting for webhook response...
+                <br />
+                <span className="text-sm text-gray-500 mt-1">This may take up to 30 seconds</span>
+              </p>
             </div>
           ) : hasContent ? (
             <div 

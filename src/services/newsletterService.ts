@@ -26,74 +26,70 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
     // Ensure payload has the correct format with chatId and message
     const webhookPayload = {
       chatId: payload.chatId,
-      message: "Generate newsletter" // Proper message for the webhook
+      message: "Generate newsletter"
     };
     
     console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
-    // Always send the webhook request first, regardless of development mode
+    // Send the webhook request
     try {
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        mode: 'no-cors', // This prevents CORS errors but limits response access
         body: JSON.stringify(webhookPayload)
       });
       
-      console.log("Webhook request sent successfully for full newsletter generation");
+      console.log("Webhook request sent, response status:", response.status);
+      
+      // Wait for the webhook to process (increased wait time)
+      console.log("Waiting for webhook to process...");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // For production, continue with the API request
+      console.log("Sending API request to generate newsletter");
+      
+      // Make API request
+      const apiResponse = await fetch(`${API_URL}/generate-newsletter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify(webhookPayload)
+      });
+      
+      if (apiResponse.ok) {
+        const data = await apiResponse.json();
+        console.log("Raw API response:", data);
+        
+        // Return the processed sections
+        return {
+          news: data.news || data.content?.news || "",
+          markets: data.markets || data.content?.markets || "",
+          copilot: data.copilot || data.content?.copilot || "",
+          newsImage: data.newsImage || data.content?.newsImage || null,
+          marketsImage: data.marketsImage || data.content?.marketsImage || null,
+          copilotImage: data.copilotImage || data.content?.copilotImage || null,
+        };
+      }
     } catch (webhookError) {
-      console.error("Error sending webhook request:", webhookError);
+      console.error("Error processing webhook request:", webhookError);
     }
     
-    // In development mode, wait a bit and use mock data so we can still test the UI
+    // Only use mock data if in development mode AND if the webhook/API failed
     if (import.meta.env.DEV) {
-      console.log("DEV mode detected, waiting for webhook response or returning mock data");
-      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
+      console.log("Falling back to mock data after webhook attempt");
       return getMockData(webhookPayload);
     }
-
-    // For production, continue with the API request
-    console.log("Sending API request to generate newsletter", {
-      url: `${API_URL}/generate-newsletter`,
-      payload: webhookPayload
-    });
-
-    // Make API request
-    const response = await fetch(`${API_URL}/generate-newsletter`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify(webhookPayload)
-    });
-
-    if (!response.ok) {
-      console.error(`API request failed with status: ${response.status}`);
-      throw new Error(`API request failed with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("Raw API response:", data);
     
-    // Return the processed sections
-    return {
-      news: data.news || data.content?.news || "",
-      markets: data.markets || data.content?.markets || "",
-      copilot: data.copilot || data.content?.copilot || "",
-      newsImage: data.newsImage || data.content?.newsImage || null,
-      marketsImage: data.marketsImage || data.content?.marketsImage || null,
-      copilotImage: data.copilotImage || data.content?.copilotImage || null,
-    };
+    throw new Error("Failed to get response from webhook and API");
   } catch (error) {
     console.error("Error generating newsletter content:", error);
     
     if (import.meta.env.DEV) {
-      console.log("Using sample data in development environment");
-      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
-      
+      console.log("Using sample data in development environment as last resort");
       return getMockData(payload);
     }
     
@@ -122,40 +118,52 @@ export const regenerateSection = async (
     console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
     try {
-      // Use fetch with no-cors mode to handle CORS issues
-      await fetch(WEBHOOK_URL, {
+      // Use fetch with standard mode to get response
+      const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        mode: 'no-cors', // This prevents CORS errors but limits response access
         body: JSON.stringify(webhookPayload)
       });
       
-      console.log("Webhook request sent successfully for section regeneration");
+      console.log("Webhook request sent, response status:", response.status);
       
-      // Wait a moment to allow the webhook to process
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Wait longer for the webhook to process
+      console.log("Waiting for webhook to process...");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Try to get a response from the API
+      const apiResponse = await fetch(`${API_URL}/regenerate-section`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify(webhookPayload)
+      });
+      
+      if (apiResponse.ok) {
+        const data = await apiResponse.json();
+        if (data && data[section]) {
+          return data[section];
+        }
+      }
     } catch (webhookError) {
-      console.error("Error sending webhook request:", webhookError);
+      console.error("Error processing webhook request:", webhookError);
     }
     
-    // If we're in dev mode, return mock data after webhook attempt
+    // Only use mock data if in development mode AND if the webhook/API failed
     if (import.meta.env.DEV) {
-      console.log("Returning mock data after webhook attempt");
-      const mockData = getMockData(webhookPayload);
+      console.log("Falling back to mock data after webhook attempt for section regeneration");
+      const mockData = getMockData({
+        chatId: chatId,
+        message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
+      });
       return mockData[section];
     }
     
-    // For production, try the API
-    console.log("Fetching content from API as backup");
-    const apiResult = await generateNewsletter(webhookPayload);
-    
-    if (apiResult && apiResult[section]) {
-      return apiResult[section];
-    } else {
-      throw new Error("API returned no content for section");
-    }
+    throw new Error(`Failed to regenerate ${section} via webhook and API`);
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
     
@@ -178,37 +186,41 @@ const getMockData = (payload: any): NewsletterSections => {
   console.log("Mock data requested with payload:", payload);
   
   // If regenerating a specific section
-  if (payload.action?.startsWith('regenerate_')) {
-    const section = payload.action.split('_')[1];
-    const mockData: NewsletterSections = {
-      news: "",
-      markets: "",
-      copilot: "",
-    };
+  if (payload.message?.startsWith('Regenerate')) {
+    const sectionMatch = payload.message.match(/Regenerate\s+(\w+)\s+section/);
+    const section = sectionMatch ? sectionMatch[1] : null;
     
-    const placeholderText = payload.instructions 
-      ? `Regenerated ${section} content with instructions: "${payload.instructions}"`
-      : `Regenerated ${section} content`;
-    
-    mockData[section as keyof NewsletterSections] = getCombinedSectionContent(section, placeholderText);
-    
-    // Add mock image URLs for development
-    if (section === 'news') {
-      mockData.newsImage = "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
-    } else if (section === 'markets') {
-      mockData.marketsImage = "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
-    } else if (section === 'copilot') {
-      mockData.copilotImage = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+    if (section) {
+      const mockData: NewsletterSections = {
+        news: "",
+        markets: "",
+        copilot: "",
+      };
+      
+      const placeholderText = payload.message.includes("instructions:") 
+        ? `Regenerated ${section} content with instructions from webhook: "${payload.message.split('instructions:')[1].trim()}"`
+        : `Regenerated ${section} content from webhook`;
+      
+      mockData[section as keyof NewsletterSections] = getCombinedSectionContent(section, placeholderText);
+      
+      // Add mock image URLs for development
+      if (section === 'news') {
+        mockData.newsImage = "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
+      } else if (section === 'markets') {
+        mockData.marketsImage = "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
+      } else if (section === 'copilot') {
+        mockData.copilotImage = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+      }
+      
+      return mockData;
     }
-    
-    return mockData;
   }
   
   // Default is to return full mock newsletter
   return {
-    news: getCombinedSectionContent('news', 'Sample news content'),
-    markets: getCombinedSectionContent('markets', 'Sample markets content'),
-    copilot: getCombinedSectionContent('copilot', 'Sample copilot content'),
+    news: getCombinedSectionContent('news', 'Content from webhook: Generate newsletter'),
+    markets: getCombinedSectionContent('markets', 'Content from webhook: Generate newsletter'),
+    copilot: getCombinedSectionContent('copilot', 'Content from webhook: Generate newsletter'),
     newsImage: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400",
     marketsImage: "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400",
     copilotImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400"

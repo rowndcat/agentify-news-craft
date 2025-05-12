@@ -105,88 +105,77 @@ export const regenerateSection = async (
       return mockData[section];
     }
     
-    // Try the webhook approach with proper error handling
-    console.log("Attempting to send to webhook:", WEBHOOK_URL);
-    console.log("Webhook payload:", JSON.stringify(payload, null, 2));
+    // Try the webhook approach first - complete rewrite of this section
+    console.log("Attempting to send webhook request to:", WEBHOOK_URL);
     
     try {
-      // Use fetch with explicit no-cors mode to help with cross-origin issues
-      const webhookResponse = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        mode: 'no-cors', // Add no-cors mode to handle CORS restrictions
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      }) as Response; // Type assertion here
+      // Create a plain XMLHttpRequest instead of fetch for better control
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', WEBHOOK_URL, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
       
-      console.log("Webhook request completed");
-      console.log("Due to no-cors mode, we won't get response details, assuming success");
+      // Log the full request details
+      console.log("XHR request payload:", JSON.stringify(payload));
       
-      // With no-cors mode, we won't get actual response status or body,
-      // so we'll need to assume success and wait for the regenerated content
-      
-      // Wait a moment for the webhook to process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Since we can't check the response with no-cors, just try the fallback API
-      console.log("Proceeding with standard API call as backup");
-      try {
-        console.log("Making standard API call for regeneration");
-        const result = await generateNewsletter(payload);
+      // Promise wrapper for XHR
+      await new Promise((resolve, reject) => {
+        xhr.onload = function() {
+          console.log("XHR status:", xhr.status);
+          console.log("XHR response text:", xhr.responseText);
+          resolve(xhr);
+        };
         
-        if (result && result[section]) {
-          console.log(`Successfully regenerated ${section} via standard API`);
-          return result[section];
-        } else {
-          throw new Error(`No content returned for ${section} section from standard API`);
-        }
-      } catch (apiError) {
-        console.error(`Error with standard API regeneration:`, apiError);
+        xhr.onerror = function() {
+          console.error("XHR error occurred");
+          resolve(xhr); // Resolve anyway to continue the flow
+        };
         
-        // If all else fails and we're in development, use mock data
-        if (import.meta.env.DEV) {
-          console.log(`Using mock data for ${section} regeneration as final fallback`);
-          await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
-          
-          const mockData = getMockData({
-            action: `regenerate_${section}`,
-            instructions
-          });
-          
-          return mockData[section];
-        }
-        
-        throw apiError;
+        // Actually send the request
+        xhr.send(JSON.stringify(payload));
+        console.log("XHR request sent successfully");
+      });
+      
+      console.log("XHR request completed, waiting for processing...");
+      
+      // Wait a moment for webhook to process
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // After webhook attempt, fall back to standard API
+      console.log("Falling back to standard API for guaranteed response");
+      const result = await generateNewsletter(payload);
+      
+      if (result && result[section]) {
+        console.log(`Successfully regenerated ${section} via standard API`);
+        return result[section];
+      } else {
+        throw new Error(`No content returned for ${section} section`);
       }
-    } catch (webhookError) {
-      console.error("Error with webhook, details:", webhookError);
-      console.log("Falling back to standard API...");
       
-      // Webhook failed, try the standard API
+    } catch (webhookError) {
+      console.error("Error with webhook attempt:", webhookError);
+      
+      // Fallback to direct API call if webhook fails
+      console.log("Webhook failed, trying standard API directly");
+      
       try {
-        console.log("Fallback to standard API for regeneration");
         const result = await generateNewsletter(payload);
         
         if (result && result[section]) {
-          console.log(`Successfully regenerated ${section} via standard API`);
+          console.log(`Successfully regenerated ${section} via direct API`);
           return result[section];
         } else {
-          throw new Error(`No content returned for ${section} section from standard API`);
+          throw new Error(`No content returned for ${section} section`);
         }
       } catch (apiError) {
-        console.error(`Error with standard API regeneration:`, apiError);
+        console.error(`Error with API regeneration:`, apiError);
         
-        // If all else fails and we're in development, use mock data
+        // Last resort fallback to mock data in development
         if (import.meta.env.DEV) {
-          console.log(`Using mock data for ${section} regeneration as final fallback`);
-          await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
-          
+          console.log(`Using mock data for ${section} as final fallback`);
           const mockData = getMockData({
             action: `regenerate_${section}`,
             instructions
           });
-          
           return mockData[section];
         }
         
@@ -194,7 +183,7 @@ export const regenerateSection = async (
       }
     }
   } catch (error) {
-    console.error(`Error regenerating ${section}:`, error);
+    console.error(`Overall error regenerating ${section}:`, error);
     
     // Final fallback to mock data in development
     if (import.meta.env.DEV) {

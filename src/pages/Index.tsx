@@ -59,6 +59,10 @@ const Index = () => {
       };
       
       console.log("Generate all request payload:", payload);
+      
+      // Show toast to indicate webhook is being called
+      toast.info("Sending request to generate newsletter...");
+      
       const result = await generateNewsletter(payload);
       
       console.log("Generate all result:", result);

@@ -49,6 +49,29 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
       
       console.log("Webhook request sent, response status:", response.status);
       
+      // Check if we got a direct response from the webhook
+      if (response.ok) {
+        try {
+          const webhookData = await response.json();
+          console.log("Webhook response data:", webhookData);
+          
+          // Check if the webhook returned content in the expected format
+          if (webhookData && webhookData.output) {
+            console.log("Using direct webhook response content");
+            
+            // Parse the webhook output which is a single markdown string with sections
+            const sections = parseWebhookOutput(webhookData.output);
+            
+            // Return the parsed sections if valid
+            if (sections.news || sections.markets || sections.copilot) {
+              return sections;
+            }
+          }
+        } catch (parseError) {
+          console.error("Error parsing webhook response:", parseError);
+        }
+      }
+      
       // Wait for the webhook to process with retry mechanism
       console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);
       
@@ -128,6 +151,59 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
 };
 
 /**
+ * Parse webhook output which comes as a single markdown string with sections
+ */
+const parseWebhookOutput = (output: string): NewsletterSections => {
+  console.log("Parsing webhook output:", output.substring(0, 100) + "...");
+  
+  const sections: NewsletterSections = {
+    news: "",
+    markets: "",
+    copilot: ""
+  };
+  
+  // Split the output by section markers
+  const parts = output.split("---");
+  
+  // Process each part to identify sections
+  parts.forEach(part => {
+    // Clean up the part
+    const trimmedPart = part.trim();
+    
+    // Identify sections based on headers
+    if (trimmedPart.includes("**News Section**") || 
+        trimmedPart.includes("### **News Section**")) {
+      sections.news = trimmedPart;
+      
+      // Use a placeholder image for news
+      sections.newsImage = sections.newsImage || "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
+    } 
+    else if (trimmedPart.includes("**Economy & Markets Section**") || 
+             trimmedPart.includes("### **Economy & Markets Section**")) {
+      sections.markets = trimmedPart;
+      
+      // Use a placeholder image for markets
+      sections.marketsImage = sections.marketsImage || "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
+    } 
+    else if (trimmedPart.includes("**Copilot Section**") || 
+             trimmedPart.includes("### **Copilot Section**") ||
+             trimmedPart.includes("**AI Copilot**")) {
+      sections.copilot = trimmedPart;
+      
+      // Use a placeholder image for copilot
+      sections.copilotImage = sections.copilotImage || "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+    }
+  });
+  
+  // Log the extracted sections
+  console.log("Parsed news section:", sections.news ? sections.news.substring(0, 50) + "..." : "None");
+  console.log("Parsed markets section:", sections.markets ? sections.markets.substring(0, 50) + "..." : "None");
+  console.log("Parsed copilot section:", sections.copilot ? sections.copilot.substring(0, 50) + "..." : "None");
+  
+  return sections;
+};
+
+/**
  * Regenerate a specific section of the newsletter
  */
 export const regenerateSection = async (
@@ -158,6 +234,29 @@ export const regenerateSection = async (
       });
       
       console.log("Webhook request sent, response status:", response.status);
+      
+      // Check if we got a direct response from the webhook
+      if (response.ok) {
+        try {
+          const webhookData = await response.json();
+          console.log("Webhook response data for regeneration:", webhookData);
+          
+          // Check if the webhook returned content in the expected format
+          if (webhookData && webhookData.output) {
+            console.log("Using direct webhook response content for regeneration");
+            
+            // Parse the webhook output for the specific section
+            const sections = parseWebhookOutput(webhookData.output);
+            
+            // Return the specific regenerated section if available
+            if (sections[section]) {
+              return sections[section];
+            }
+          }
+        } catch (parseError) {
+          console.error("Error parsing webhook regeneration response:", parseError);
+        }
+      }
       
       // Wait longer for the webhook to process
       console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);

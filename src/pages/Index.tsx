@@ -71,7 +71,7 @@ const Index = () => {
       
       // Update with a more informative toast that explains the waiting process
       toast.loading("Processing your newsletter request. This may take up to 30 seconds...", {
-        duration: 15000,
+        duration: 30000,
       });
       
       const result = await generateNewsletter(payload);

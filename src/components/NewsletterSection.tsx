@@ -40,29 +40,43 @@ const formatMarkdown = (text: string): string => {
   // Pre-processing for special cases
   let formattedText = text;
   
-  // Preserve placeholder content in News Section
+  // Process News Section
   if (formattedText.includes("**News Section**") || 
-      formattedText.includes("*AI News piece*") || 
-      formattedText.includes("*7 additional article links*")) {
+      formattedText.includes("### **News Section**") ||
+      formattedText.includes("**Title:")) {
     
-    // Keep these specific headers for the News section since they're part of the content structure
+    // Make section header stand out
     formattedText = formattedText
-      // Make section header stand out
       .replace(/\*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>')
-      // Format placeholder items
-      .replace(/\*AI News piece\*:/g, '<strong>AI News piece</strong>:')
-      .replace(/\*7 additional article links\*:/g, '<strong>7 additional article links</strong>:');
+      .replace(/### \*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>');
+      
+    // Format title
+    formattedText = formattedText
+      .replace(/\*\*Title:(.*?)\*\*/g, '<h3 class="text-lg font-medium mb-2">$1</h3>')
+      .replace(/TL;DR:/g, '<strong>TL;DR:</strong>');
+      
+    // Format bullet points and sections
+    formattedText = formattedText
+      .replace(/BULLET POINTS:/g, '<p class="font-semibold mt-3 mb-1">BULLET POINTS:</p>')
+      .replace(/KEY TAKEAWAY:/g, '<p class="font-semibold mt-3 mb-1">KEY TAKEAWAY:</p>');
+      
+    // Format additional links section
+    formattedText = formattedText
+      .replace(/#### 7 Additional News Links:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
+      .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>');
   }
   
   // For Markets section with emoji headers
   if (formattedText.includes("**Economy & Markets Section**") ||
+      formattedText.includes("### **Economy & Markets Section**") ||
       formattedText.includes("🌍 Big Picture") || 
       formattedText.includes("📈 What to Watch") ||
       formattedText.includes("🔑 Key Takeaway")) {
       
     // Make section header stand out
     formattedText = formattedText
-      .replace(/\*\*Economy & Markets Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Economy & Markets Section</h2>');
+      .replace(/\*\*Economy & Markets Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Economy & Markets Section</h2>')
+      .replace(/### \*\*Economy & Markets Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Economy & Markets Section</h2>');
       
     // Handle emoji headers
     formattedText = formattedText
@@ -75,11 +89,36 @@ const formatMarkdown = (text: string): string => {
   }
   
   // For Copilot section
-  if (formattedText.includes("**Copilot**") || formattedText.includes("**AI Copilot**")) {
+  if (formattedText.includes("**Copilot**") || 
+      formattedText.includes("**AI Copilot**") || 
+      formattedText.includes("**Copilot Section**") ||
+      formattedText.includes("### **Copilot Section**")) {
     // Make section header stand out
     formattedText = formattedText
       .replace(/\*\*Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Copilot</h2>')
-      .replace(/\*\*AI Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">AI Copilot</h2>');
+      .replace(/\*\*AI Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">AI Copilot</h2>')
+      .replace(/\*\*Copilot Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Copilot</h2>')
+      .replace(/### \*\*Copilot Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Copilot</h2>');
+      
+    // Format sections for Copilot
+    formattedText = formattedText
+      .replace(/\*\*Purpose:\*\*/g, '<p class="font-semibold mt-3 mb-1">Purpose:</p>')
+      .replace(/\*\*Objective:\*\*/g, '<p class="font-semibold mt-3 mb-1">Objective:</p>')
+      .replace(/\*\*SMB Relevance:\*\*/g, '<p class="font-semibold mt-3 mb-1">SMB Relevance:</p>')
+      .replace(/\*\*Timeliness\/Context.*?\*\*/g, '<p class="font-semibold mt-3 mb-1">Timeliness/Context:</p>')
+      .replace(/\*\*Core Functionality:\*\*/g, '<p class="font-semibold mt-3 mb-1">Core Functionality:</p>')
+      .replace(/\*\*Copilot Actions:\*\*/g, '<p class="font-semibold mt-2 mb-1">Copilot Actions:</p>')
+      .replace(/\*\*Key Capabilities to Leverage:\*\*/g, '<p class="font-semibold mt-3 mb-1">Key Capabilities:</p>')
+      .replace(/\*\*Interaction Style:\*\*/g, '<p class="font-semibold mt-3 mb-1">Interaction Style:</p>')
+      .replace(/\*\*Copilot Persona\/Tone:\*\*/g, '<p class="font-medium mt-2 mb-1">Copilot Persona/Tone:</p>')
+      .replace(/\*\*Guidance Level:\*\*/g, '<p class="font-medium mt-2 mb-1">Guidance Level:</p>')
+      .replace(/\*\*Typical User Inputs:\*\*/g, '<p class="font-semibold mt-3 mb-1">Typical User Inputs:</p>')
+      .replace(/\*\*Information Required:\*\*/g, '<p class="font-medium mt-2 mb-1">Information Required:</p>')
+      .replace(/\*\*Format of Input.*?\*\*/g, '<p class="font-medium mt-2 mb-1">Format of Input:</p>')
+      .replace(/\*\*Expected Outputs:\*\*/g, '<p class="font-semibold mt-3 mb-1">Expected Outputs:</p>')
+      .replace(/\*\*Deliverables:\*\*/g, '<p class="font-medium mt-2 mb-1">Deliverables:</p>')
+      .replace(/\*\*Format\/Structure of Output:\*\*/g, '<p class="font-medium mt-2 mb-1">Format/Structure of Output:</p>')
+      .replace(/\*\*Success Criteria:\*\*/g, '<p class="font-semibold mt-3 mb-1">Success Criteria:</p>');
   }
   
   // Replace markdown headers (that haven't been processed already)
@@ -133,7 +172,7 @@ const formatMarkdown = (text: string): string => {
   formattedText = formattedText.replace(/---/g, '<hr class="my-4" />');
   
   // Handle parenthetical references like (Reuters, Bloomberg)
-  formattedText = formattedText.replace(/\((Reuters|Bloomberg|NYT|CNN|AP)(?:,\s*(Reuters|Bloomberg|NYT|CNN|AP))*\)/g, 
+  formattedText = formattedText.replace(/\((Reuters|Bloomberg|NYT|CNN|AP|Financial Times)(?:,\s*(Reuters|Bloomberg|NYT|CNN|AP|Financial Times))*\)/g, 
     '<span class="text-gray-500 text-sm">$&</span>');
     
   return formattedText;

@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -23,17 +22,24 @@ const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439
 export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
   try {
     console.log("Sending webhook request for full newsletter generation to:", WEBHOOK_URL);
-    console.log("With payload:", JSON.stringify(payload));
+    
+    // Ensure payload has the correct format with chatId and message
+    const webhookPayload = {
+      chatId: payload.chatId,
+      message: "Generate newsletter" // Proper message for the webhook
+    };
+    
+    console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
     // Always send the webhook request first, regardless of development mode
     try {
-      await fetch(WEBHOOK_URL, {
+      const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         mode: 'no-cors', // This prevents CORS errors but limits response access
-        body: JSON.stringify(payload)
+        body: JSON.stringify(webhookPayload)
       });
       
       console.log("Webhook request sent successfully for full newsletter generation");
@@ -43,15 +49,15 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
     
     // In development mode, wait a bit and use mock data so we can still test the UI
     if (import.meta.env.DEV) {
-      console.log("DEV mode detected, returning mock data with payload:", payload);
+      console.log("DEV mode detected, waiting for webhook response or returning mock data");
       await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
-      return getMockData(payload);
+      return getMockData(webhookPayload);
     }
 
     // For production, continue with the API request
     console.log("Sending API request to generate newsletter", {
       url: `${API_URL}/generate-newsletter`,
-      payload
+      payload: webhookPayload
     });
 
     // Make API request
@@ -61,7 +67,7 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${API_KEY}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(webhookPayload)
     });
 
     if (!response.ok) {
@@ -106,16 +112,14 @@ export const regenerateSection = async (
   try {
     console.log(`Regenerating ${section} with instructions:`, instructions);
     
-    // Prepare payload for regeneration
-    const payload = {
-      chatId,
-      action: `regenerate_${section}`,
-      instructions
+    // Prepare payload for regeneration with proper format
+    const webhookPayload = {
+      chatId: chatId,
+      message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
     };
     
-    // Always send to webhook first, even in dev mode
     console.log("Sending webhook request to:", WEBHOOK_URL);
-    console.log("With payload:", JSON.stringify(payload));
+    console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
     try {
       // Use fetch with no-cors mode to handle CORS issues
@@ -125,7 +129,7 @@ export const regenerateSection = async (
           'Content-Type': 'application/json',
         },
         mode: 'no-cors', // This prevents CORS errors but limits response access
-        body: JSON.stringify(payload)
+        body: JSON.stringify(webhookPayload)
       });
       
       console.log("Webhook request sent successfully for section regeneration");
@@ -139,13 +143,13 @@ export const regenerateSection = async (
     // If we're in dev mode, return mock data after webhook attempt
     if (import.meta.env.DEV) {
       console.log("Returning mock data after webhook attempt");
-      const mockData = getMockData(payload);
+      const mockData = getMockData(webhookPayload);
       return mockData[section];
     }
     
     // For production, try the API
     console.log("Fetching content from API as backup");
-    const apiResult = await generateNewsletter(payload);
+    const apiResult = await generateNewsletter(webhookPayload);
     
     if (apiResult && apiResult[section]) {
       return apiResult[section];
@@ -159,8 +163,8 @@ export const regenerateSection = async (
     if (import.meta.env.DEV) {
       console.log("DEV mode: Using mock data as final fallback");
       const mockData = getMockData({
-        action: `regenerate_${section}`,
-        instructions
+        chatId: chatId,
+        message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
       });
       return mockData[section];
     }

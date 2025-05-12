@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -53,9 +52,10 @@ const Index = () => {
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
     
     try {
+      // Create the proper payload structure with chatId and message
       const payload = {
         chatId: chatId,
-        message: "Generate a complete newsletter with AI news, markets, and copilot sections"
+        message: "Generate newsletter"
       };
       
       console.log("Generate all request payload:", payload);

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
 import { generateNewsletter, regenerateSection, NewsletterSections } from "@/services/newsletterService";
@@ -12,6 +13,13 @@ const Index = () => {
   const navigate = useNavigate();
   // Generate a random chat ID for this session
   const [chatId] = useState(`chat_${Math.random().toString(36).substring(2, 10)}`);
+  
+  // Log webhook URL on component mount
+  useEffect(() => {
+    console.log("Current chat ID:", chatId);
+    console.log("Webhook URL to use:", "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat");
+  }, [chatId]);
+  
   const [content, setContent] = useState<NewsletterSections>({
     news: "",
     markets: "",
@@ -97,6 +105,10 @@ const Index = () => {
     
     try {
       console.log(`Regenerating ${section} with instructions:`, instructions);
+      console.log("Using chat ID:", chatId);
+      
+      // Display toast to indicate webhook is being called
+      toast.info(`Sending ${section} regeneration request...`);
       
       // Get regenerated section using the regenerateSection function
       const regeneratedContent = await regenerateSection(

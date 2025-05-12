@@ -14,7 +14,7 @@ const MOCK_DELAY = 2000;
 // API constants
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.agentify360.com';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/dbcfd9ed-a84b-44db-a493-da8f368974f1/chat";
+const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat";
 
 /**
  * Send a request to generate newsletter content
@@ -92,102 +92,65 @@ export const regenerateSection = async (
       instructions
     };
     
-    // In development mode, use mock data for quicker testing
-    if (import.meta.env.DEV) {
-      console.log(`DEV mode detected, using mock data for ${section} regeneration`);
-      await new Promise(resolve => setTimeout(resolve, MOCK_DELAY));
-      
-      const mockData = getMockData({
-        action: `regenerate_${section}`,
-        instructions
-      });
-      
-      return mockData[section];
-    }
+    // In development mode, use mock data for quicker testing after sending webhook
+    const useMockData = import.meta.env.DEV;
     
-    // Try the webhook approach first - complete rewrite of this section
-    console.log("Attempting to send webhook request to:", WEBHOOK_URL);
+    // Always try to send to webhook first, even in dev mode
+    console.log("Sending webhook request to:", WEBHOOK_URL);
+    console.log("With payload:", JSON.stringify(payload));
     
     try {
-      // Create a plain XMLHttpRequest instead of fetch for better control
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', WEBHOOK_URL, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      
-      // Log the full request details
-      console.log("XHR request payload:", JSON.stringify(payload));
-      
-      // Promise wrapper for XHR
-      await new Promise((resolve, reject) => {
-        xhr.onload = function() {
-          console.log("XHR status:", xhr.status);
-          console.log("XHR response text:", xhr.responseText);
-          resolve(xhr);
-        };
-        
-        xhr.onerror = function() {
-          console.error("XHR error occurred");
-          resolve(xhr); // Resolve anyway to continue the flow
-        };
-        
-        // Actually send the request
-        xhr.send(JSON.stringify(payload));
-        console.log("XHR request sent successfully");
+      // Use fetch with no-cors mode to handle CORS issues
+      const webhookResponse = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        mode: 'no-cors', // This prevents CORS errors but limits response access
+        body: JSON.stringify(payload)
       });
       
-      console.log("XHR request completed, waiting for processing...");
+      console.log("Webhook request sent successfully");
       
-      // Wait a moment for webhook to process
+      // Since no-cors mode doesn't allow reading the response status or body,
+      // we'll wait a moment to allow the webhook to process
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // After webhook attempt, fall back to standard API
-      console.log("Falling back to standard API for guaranteed response");
-      const result = await generateNewsletter(payload);
+      // If we're in dev mode, we can return mock data right away after webhook attempt
+      if (useMockData) {
+        console.log("Returning mock data after webhook attempt");
+        const mockData = getMockData(payload);
+        return mockData[section];
+      }
       
-      if (result && result[section]) {
-        console.log(`Successfully regenerated ${section} via standard API`);
-        return result[section];
+      // For production, we'll fall back to the API
+      console.log("Fetching content from API as backup");
+      const apiResult = await generateNewsletter(payload);
+      
+      if (apiResult && apiResult[section]) {
+        return apiResult[section];
       } else {
-        throw new Error(`No content returned for ${section} section`);
+        throw new Error("API returned no content for section");
       }
       
-    } catch (webhookError) {
-      console.error("Error with webhook attempt:", webhookError);
+    } catch (error) {
+      console.error("Error with webhook/API approach:", error);
       
-      // Fallback to direct API call if webhook fails
-      console.log("Webhook failed, trying standard API directly");
-      
-      try {
-        const result = await generateNewsletter(payload);
-        
-        if (result && result[section]) {
-          console.log(`Successfully regenerated ${section} via direct API`);
-          return result[section];
-        } else {
-          throw new Error(`No content returned for ${section} section`);
-        }
-      } catch (apiError) {
-        console.error(`Error with API regeneration:`, apiError);
-        
-        // Last resort fallback to mock data in development
-        if (import.meta.env.DEV) {
-          console.log(`Using mock data for ${section} as final fallback`);
-          const mockData = getMockData({
-            action: `regenerate_${section}`,
-            instructions
-          });
-          return mockData[section];
-        }
-        
-        throw apiError;
+      // Final fallback to mock data if in development
+      if (useMockData) {
+        console.log("Returning mock data after error");
+        const mockData = getMockData(payload);
+        return mockData[section];
       }
+      
+      throw error;
     }
   } catch (error) {
-    console.error(`Overall error regenerating ${section}:`, error);
+    console.error(`Error regenerating ${section}:`, error);
     
     // Final fallback to mock data in development
     if (import.meta.env.DEV) {
-      console.log(`DEV mode: Falling back to mock data after all errors`);
+      console.log("DEV mode: Using mock data as final fallback");
       const mockData = getMockData({
         action: `regenerate_${section}`,
         instructions

@@ -42,19 +42,11 @@ const formatMarkdown = (text: string): string => {
   // Pre-processing for special cases
   let formattedText = text;
 
-  // Process for News Section
-  if (formattedText.includes("News Section") || 
-      formattedText.includes("**News Section**") || 
+  // Process News Section
+  if (formattedText.includes("**News Section**") || 
       formattedText.includes("### **News Section**") ||
       formattedText.includes("**Title:") ||
       formattedText.includes("*AI News piece*:")) {
-    
-    // Clean up any section headers as we'll be showing it in the card header already
-    formattedText = formattedText
-      .replace(/^News Section\s*[\r\n]+/im, '')
-      .replace(/^\*\*News Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^### \*\*News Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^## News Section\s*[\r\n]+/im, '');
     
     // Make section header stand out
     formattedText = formattedText
@@ -77,24 +69,15 @@ const formatMarkdown = (text: string): string => {
     formattedText = formattedText
       .replace(/\*\*7 Additional News Links\*\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
       .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>')
-      .replace(/\*7 additional article links\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">Additional Article Links:</h4>')
-      .replace(/7 Additional News Links:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>');
+      .replace(/\*7 additional article links\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">Additional Article Links:</h4>');
   }
   
   // For Markets section with emoji headers
-  else if (formattedText.includes("Economy & Markets Section") ||
-      formattedText.includes("**Economy & Markets Section**") ||
+  if (formattedText.includes("**Economy & Markets Section**") ||
       formattedText.includes("### **Economy & Markets Section**") ||
       formattedText.includes("🌍 Big Picture") || 
       formattedText.includes("📈 What to Watch") ||
       formattedText.includes("🔑 Key Takeaway")) {
-      
-    // Clean up any section headers as we'll be showing it in the card header already
-    formattedText = formattedText
-      .replace(/^Economy & Markets Section\s*[\r\n]+/im, '')
-      .replace(/^\*\*Economy & Markets Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^### \*\*Economy & Markets Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^## Economy & Markets Section\s*[\r\n]+/im, '');
       
     // Make section header stand out
     formattedText = formattedText
@@ -112,20 +95,10 @@ const formatMarkdown = (text: string): string => {
   }
   
   // For Copilot section
-  else if (formattedText.includes("**Copilot**") || 
+  if (formattedText.includes("**Copilot**") || 
       formattedText.includes("**AI Copilot**") || 
       formattedText.includes("**Copilot Section**") ||
-      formattedText.includes("### **Copilot Section**") ||
-      formattedText.includes("TIME: Automate Your") ||
-      formattedText.includes("ATTENTION: Generate")) {
-    
-    // Clean up any section headers as we'll be showing it in the card header already
-    formattedText = formattedText
-      .replace(/^Copilot Section\s*[\r\n]+/im, '')
-      .replace(/^\*\*Copilot Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^### \*\*Copilot Section\*\*\s*[\r\n]+/im, '')
-      .replace(/^## Copilot Section\s*[\r\n]+/im, '');
-    
+      formattedText.includes("### **Copilot Section**")) {
     // Make section header stand out
     formattedText = formattedText
       .replace(/\*\*Copilot\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">Copilot</h2>')
@@ -155,20 +128,6 @@ const formatMarkdown = (text: string): string => {
       .replace(/\*\*TIME – Reclaim Your Hours\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">TIME – Reclaim Your Hours</h3>')
       .replace(/\*\*ATTENTION – Amplify Your Voice\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">ATTENTION – Amplify Your Voice</h3>')
       .replace(/\*\*PROFIT\/PROGRESS – Scale Your Impact\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">PROFIT/PROGRESS – Scale Your Impact</h3>');
-
-    // Handle Copilot-specific formats like "TIME: Automate..."
-    formattedText = formattedText
-      .replace(/TIME: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">TIME: $1</h3>')
-      .replace(/ATTENTION: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">ATTENTION: $1</h3>')
-      .replace(/PROFIT\/PROGRESS: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">PROFIT/PROGRESS: $1</h3>');
-      
-    // Handle bullet points in copilot section
-    formattedText = formattedText
-      .replace(/- Purpose/g, '<h3 class="text-lg font-medium mb-2 mt-4">Purpose</h3>')
-      .replace(/- Core Functionality/g, '<h3 class="text-lg font-medium mb-2 mt-4">Core Functionality</h3>')
-      .replace(/- Interaction Style/g, '<h3 class="text-lg font-medium mb-2 mt-4">Interaction Style</h3>')
-      .replace(/- Typical User Inputs/g, '<h3 class="text-lg font-medium mb-2 mt-4">Typical User Inputs</h3>')
-      .replace(/- Expected Outputs/g, '<h3 class="text-lg font-medium mb-2 mt-4">Expected Outputs</h3>');
   }
   
   // Replace markdown headers (that haven't been processed already)

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -61,29 +62,10 @@ const Index = () => {
     copilot: false,
   });
 
-  // State to track when webhook processing is happening
-  // We need to keep this state between fetches
+  // Add a state to track when webhook processing is happening
   const [isWebhookProcessing, setIsWebhookProcessing] = useState(false);
-  
-  // Add timeout reference to clear it if component unmounts
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-
-  // Cleanup function for the timeout
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
 
   const handleGenerateAll = async () => {
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
     setIsWebhookProcessing(true);
     
@@ -100,24 +82,11 @@ const Index = () => {
       toast.info("Sending request to generate newsletter...");
       
       // Update with a more informative toast that explains the waiting process
-      const loadingToastId = toast.loading("Processing your newsletter request. This may take up to 2 minutes...", {
-        duration: 120000, // Increase duration to 2 minutes to ensure it stays visible
+      toast.loading("Processing your newsletter request. This may take up to 30 seconds...", {
+        duration: 30000,
       });
       
-      // Set a timeout to check if the webhook is taking too long
-      timeoutRef.current = setTimeout(() => {
-        // If we're still loading after 90 seconds, show a notification
-        if (isWebhookProcessing) {
-          toast.info("Still waiting for webhook response. This might take a little longer than expected...", {
-            duration: 30000,
-          });
-        }
-      }, 90000);
-      
       const result = await generateNewsletter(payload);
-      
-      // Dismiss the loading toast
-      toast.dismiss(loadingToastId);
       
       console.log("Generate all result:", result);
       console.log("News content received:", result.news ? result.news.substring(0, 100) + "..." : "None");
@@ -168,24 +137,12 @@ const Index = () => {
       console.error("Failed to generate newsletter:", error);
       toast.error("Failed to generate newsletter. Please try again.");
     } finally {
-      // Clear the timeout if it exists
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
       setIsLoading(prev => ({ ...prev, all: false, news: false, markets: false, copilot: false }));
       setIsWebhookProcessing(false);
     }
   };
 
   const handleRegenerateSection = async (section: keyof NewsletterSections, instructions?: string) => {
-    // Clear any existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    
     setIsLoading(prev => ({ ...prev, [section]: true }));
     setIsWebhookProcessing(true);
     
@@ -197,19 +154,9 @@ const Index = () => {
       toast.info(`Sending ${section} regeneration request...`);
       
       // Update with a more informative toast that explains the waiting process
-      const loadingToastId = toast.loading(`Processing your ${section} regeneration. This may take up to 2 minutes...`, {
-        duration: 120000, // Increase duration to 2 minutes
+      toast.loading(`Processing your ${section} regeneration. This may take up to 30 seconds...`, {
+        duration: 15000,
       });
-      
-      // Set a timeout to check if the webhook is taking too long
-      timeoutRef.current = setTimeout(() => {
-        // If we're still loading after 90 seconds, show a notification
-        if (isWebhookProcessing) {
-          toast.info(`Still waiting for ${section} webhook response. This might take a little longer than expected...`, {
-            duration: 30000,
-          });
-        }
-      }, 90000);
       
       // Get regenerated section using the regenerateSection function
       const regeneratedContent = await regenerateSection(
@@ -217,9 +164,6 @@ const Index = () => {
         chatId,
         instructions
       );
-      
-      // Dismiss the loading toast
-      toast.dismiss(loadingToastId);
       
       console.log(`Regenerated ${section} content:`, regeneratedContent ? regeneratedContent.substring(0, 100) + "..." : "No content");
       
@@ -239,12 +183,6 @@ const Index = () => {
       console.error(`Failed to regenerate ${section} section:`, error);
       toast.error(`Failed to regenerate ${section} section. Please try again.`);
     } finally {
-      // Clear the timeout if it exists
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      
       setIsLoading(prev => ({ ...prev, [section]: false }));
       setIsWebhookProcessing(false);
     }
@@ -272,7 +210,7 @@ const Index = () => {
       
       // Display loading toast
       const loadingToastId = toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
-        duration: 30000, // Increase to 30 seconds
+        duration: 15000,
       });
       
       // Call the service function to generate the image
@@ -338,21 +276,6 @@ const Index = () => {
   useEffect(() => {
     console.log("Image URLs updated:", imageUrls);
   }, [imageUrls]);
-  
-  // Log state changes for webhook processing
-  useEffect(() => {
-    console.log("Webhook processing state changed:", isWebhookProcessing);
-  }, [isWebhookProcessing]);
-
-  // Log actual UI state on each render
-  useEffect(() => {
-    console.log("AI News content available:", content.news ? "Yes" : "No");
-    console.log("AI News image URL:", imageUrls.news);
-    console.log("Markets & Economy content available:", content.markets ? "Yes" : "No");
-    console.log("Markets & Economy image URL:", imageUrls.markets);
-    console.log("Copilot content available:", content.copilot ? "Yes" : "No");
-    console.log("Copilot image URL:", imageUrls.copilot);
-  });
 
   return (
     <div className="min-h-screen px-4 pb-12">
@@ -360,7 +283,7 @@ const Index = () => {
         <div className="max-w-4xl mx-auto">
           {isWebhookProcessing && (
             <Announcement 
-              message="Your request is being processed. This may take up to 2 minutes. Please wait..." 
+              message="Your request is being processed. This may take up to 30 seconds. Please wait..." 
               type="info"
             />
           )}

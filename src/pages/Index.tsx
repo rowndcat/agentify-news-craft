@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -190,7 +189,7 @@ const Index = () => {
     navigate('/combined');
   };
 
-  // Fixed function to handle image generation - using correct type constraint
+  // Fixed function to handle image generation - explicit type constraint
   const handleGenerateImage = async (section: 'news' | 'markets' | 'copilot') => {
     if (!content[section]) {
       toast.error(`No ${section} content available. Please generate content first.`);

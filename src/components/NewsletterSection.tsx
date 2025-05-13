@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -227,7 +228,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   };
 
   // Function to handle image download
-  const handleDownloadImage = () => {
+  const handleViewImage = () => {
     if (!imageUrl) return;
     
     // Open the webView link in a new tab
@@ -343,7 +344,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 )}
                 {/* View Image Button */}
                 <Button 
-                  onClick={handleDownloadImage} 
+                  onClick={handleViewImage} 
                   variant="ghost" 
                   size="sm"
                   disabled={!imageUrl || isWebhookProcessing}

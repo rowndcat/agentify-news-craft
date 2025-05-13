@@ -1,3 +1,4 @@
+
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -347,7 +348,7 @@ export const generateSectionImage = async (
     // Prepare payload for image generation
     const payload = {
       section: section,
-      content: content
+      content: content.substring(0, 4000) // Limit content length to avoid very large payloads
     };
     
     console.log("Sending image generation webhook request to:", IMAGE_WEBHOOK_URL);

@@ -1,515 +1,315 @@
+
+// Import necessary types
 import { toast } from "sonner";
 
-// Define types
+// Define the structure for newsletter sections
 export interface NewsletterSections {
   news: string;
   markets: string;
   copilot: string;
 }
 
-// Function to generate the newsletter content
-export const generateNewsletter = async (payload: { chatId: string; message: string }): Promise<any> => {
+// Webhook URLs (consider moving to environment variables in a production app)
+const CHAT_WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat";
+const IMAGE_WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f";
+
+/**
+ * Generate a complete newsletter with all sections
+ */
+export const generateNewsletter = async (payload: {
+  chatId: string;
+  message: string;
+}): Promise<{
+  news: string;
+  markets: string;
+  copilot: string;
+  newsImage?: string;
+  marketsImage?: string;
+  copilotImage?: string;
+}> => {
+  console.log("Generating newsletter with payload:", payload);
+
   try {
-    console.log("Sending generateNewsletter request with payload:", payload);
-    
-    // Show toast to indicate request is being made
-    toast.info("Sending newsletter generation request...");
-    
-    // Make the API request
-    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
+    // Send request to the webhook
+    const response = await fetch(CHAT_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
-    
-    if (!response.ok) {
-      console.error("Failed to generate newsletter. Status:", response.status);
-      throw new Error(`Failed to generate newsletter. Status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log("Newsletter webhook response:", data);
-    
-    // Initialize result object for storing the parsed sections
-    let result: { news?: string; markets?: string; copilot?: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {};
-    
-    if (data && data.output) {
-      console.log("Raw webhook output:", data.output);
 
-      // First, try to parse the data.output as JSON
-      if (typeof data.output === "string") {
-        try {
-          const parsedOutput = JSON.parse(data.output);
-          console.log("Parsed webhook output:", parsedOutput);
-          extractSectionsFromObject(parsedOutput, result);
-          
-          // If we have content but the sections aren't separated correctly (all in news)
-          if (result.news && !result.markets && !result.copilot && 
-              (result.news.includes("Economy & Markets Section") || 
-               result.news.includes("Markets Section") || 
-               result.news.includes("Copilot Section"))) {
-            console.log("All content appears to be in news section - attempting to separate");
-            const separatedSections = separateAllSectionsFromCombinedText(result.news);
-            result = { ...result, ...separatedSections };
-          }
-        } catch (error) {
-          console.error("Failed to parse webhook output as JSON:", error);
-          
-          // If parsing as JSON fails, try to separate sections directly from the text
-          const outputStr = data.output;
-          console.log("Attempting to separate sections from raw string output");
-          const separatedSections = separateAllSectionsFromCombinedText(outputStr);
-          Object.assign(result, separatedSections);
-        }
-      } else if (typeof data.output === "object") {
-        // Output is already an object
-        console.log("Webhook output is already an object");
-        extractSectionsFromObject(data.output, result);
-      }
+    // Check if the response is OK
+    if (!response.ok) {
+      console.error("Webhook response error:", response.status, response.statusText);
+      throw new Error(`Webhook response error: ${response.statusText}`);
     }
-    
-    // If we've exhausted all options and still don't have content, try direct data
-    if (!result.news && !result.markets && !result.copilot && data) {
-      console.log("Attempting direct data extraction as fallback");
-      extractSectionsFromObject(data, result);
+
+    // Parse the response
+    const responseData = await response.json();
+    console.log("Webhook response data:", responseData);
+
+    // Ensure we have a valid response with text
+    if (!responseData || !responseData.text) {
+      console.error("Invalid webhook response - missing text");
+      throw new Error("Invalid webhook response");
     }
-    
-    // If we've tried everything and still don't have content, log an error
-    if (!result.news && !result.markets && !result.copilot) {
-      console.error("Could not extract any section content from webhook response", data);
-      toast.error("Could not extract content from webhook response. Please check the console for details.");
-    }
-    
-    return result;
+
+    // Get the response text
+    const fullText = responseData.text;
+    console.log("Full response text:", fullText);
+
+    // Separate the sections with advanced parsing logic
+    const sections = separateNewsSections(fullText);
+    console.log("Parsed sections:", sections);
+
+    // Return the sections
+    return {
+      news: sections.news || "",
+      markets: sections.markets || "",
+      copilot: sections.copilot || "",
+      newsImage: responseData.newsImage || null,
+      marketsImage: responseData.marketsImage || null,
+      copilotImage: responseData.copilotImage || null,
+    };
   } catch (error) {
-    console.error("Error in generateNewsletter:", error);
+    console.error("Error generating newsletter:", error);
     throw error;
   }
 };
 
-// Helper function to separate all sections from combined text
-function separateAllSectionsFromCombinedText(text: string): { news: string; markets: string; copilot: string } {
-  console.log("Separating all sections from combined text");
-  const result = { news: "", markets: "", copilot: "" };
-
-  // Get section boundaries
-  const newsSectionMatch = findSectionStart(text, [
-    /News Section/i,
-    /\*\*News Section\*\*/i,
-    /### \*\*News Section\*\*/i,
-    /### News Section/i,
-    /## News Section/i
-  ]);
-
-  const marketsSectionMatch = findSectionStart(text, [
-    /Economy & Markets Section/i,
-    /\*\*Economy & Markets Section\*\*/i,
-    /### \*\*Economy & Markets Section\*\*/i,
-    /### Economy & Markets Section/i,
-    /## Economy & Markets Section/i,
-    /Markets Section/i,
-    /\*\*Markets Section\*\*/i,
-    /### \*\*Markets Section\*\*/i,
-    /### Markets Section/i,
-    /## Markets Section/i,
-  ]);
-
-  const copilotSectionMatch = findSectionStart(text, [
-    /Copilot Section/i,
-    /\*\*Copilot Section\*\*/i,
-    /### \*\*Copilot Section\*\*/i,
-    /### Copilot Section/i,
-    /## Copilot Section/i,
-    /\*\*Copilot\*\*/i,
-    /### \*\*Copilot\*\*/i,
-    /### Copilot/i,
-    /## Copilot/i,
-  ]);
-
-  // If we find at least two sections, we can determine the boundaries
-  if (newsSectionMatch && marketsSectionMatch) {
-    result.news = text.substring(newsSectionMatch.index, marketsSectionMatch.index).trim();
-    
-    if (copilotSectionMatch) {
-      result.markets = text.substring(marketsSectionMatch.index, copilotSectionMatch.index).trim();
-      result.copilot = text.substring(copilotSectionMatch.index).trim();
-    } else {
-      result.markets = text.substring(marketsSectionMatch.index).trim();
-    }
-  } 
-  // If we only find news and copilot (missing markets)
-  else if (newsSectionMatch && copilotSectionMatch) {
-    result.news = text.substring(newsSectionMatch.index, copilotSectionMatch.index).trim();
-    result.copilot = text.substring(copilotSectionMatch.index).trim();
-  }
-  // Only news section found
-  else if (newsSectionMatch) {
-    result.news = text.substring(newsSectionMatch.index).trim();
-  }
-  // Fall back to checking for other distinguishing features if section headers aren't found
-  else {
-    // Try to identify sections by markdown separators
-    const parts = text.split(/---+\s*\n/);
-    
-    if (parts.length >= 3) {
-      result.news = parts[0].trim();
-      result.markets = parts[1].trim();
-      result.copilot = parts.slice(2).join("\n").trim();
-    } 
-    // Try to identify by emoji headers which are common in the markets section
-    else if (text.includes("🌍 Big Picture") && text.includes("📈 What to Watch")) {
-      const marketStart = text.indexOf("🌍 Big Picture");
-      const beforeMarkets = text.substring(0, marketStart).trim();
-      
-      if (beforeMarkets.includes("News Section") || 
-          beforeMarkets.includes("**News Section**") ||
-          beforeMarkets.includes("Additional News Links")) {
-        result.news = beforeMarkets;
-      }
-      
-      // Find where copilot might start
-      let copilotStart = text.indexOf("**Copilot");
-      if (copilotStart === -1) copilotStart = text.indexOf("### Copilot");
-      if (copilotStart === -1) copilotStart = text.indexOf("## Copilot");
-      if (copilotStart === -1) copilotStart = text.indexOf("TIME: ");
-      if (copilotStart === -1) copilotStart = text.indexOf("TIME – Reclaim Your");
-      
-      if (copilotStart !== -1) {
-        result.markets = text.substring(marketStart, copilotStart).trim();
-        result.copilot = text.substring(copilotStart).trim();
-      } else {
-        result.markets = text.substring(marketStart).trim();
-      }
-    }
-    // If all else fails, fall back to using the original text as news
-    else {
-      result.news = text.trim();
-    }
-  }
-  
-  // Log the result for debugging
-  console.log("Separation results:");
-  console.log("News section found:", result.news ? "Yes" : "No", result.news ? `(${result.news.length} chars)` : "");
-  console.log("Markets section found:", result.markets ? "Yes" : "No", result.markets ? `(${result.markets.length} chars)` : "");
-  console.log("Copilot section found:", result.copilot ? "Yes" : "No", result.copilot ? `(${result.copilot.length} chars)` : "");
-  
-  return result;
-}
-
-// Helper function to find the start of a section using an array of patterns
-function findSectionStart(text: string, patterns: RegExp[]): { index: number, match: string } | null {
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match && match.index !== undefined) {
-      return { index: match.index, match: match[0] };
-    }
-  }
-  return null;
-}
-
-// Helper function to split a single text with multiple sections into separate sections
-function splitContentIntoSections(content: string): { news: string; markets: string; copilot: string } {
-  console.log("Splitting combined content into sections");
-  return separateAllSectionsFromCombinedText(content);
-}
-
-// Helper function to extract sections from an object data structure
-function extractSectionsFromObject(data: any, result: any): void {
-  if (!data) return;
-  
-  // Direct section properties with various possible names
-  result.news = result.news || data.news || data["AI News piece"] || data.newsSection || "";
-  result.markets = result.markets || data.markets || data.economy || data["Economy & Markets Section"] || data.marketsSection || "";
-  result.copilot = result.copilot || data.copilot || data["AI Copilot"] || data.copilotSection || data["Copilot Section"] || "";
-  
-  // Check if sections array exists
-  if (data.sections && Array.isArray(data.sections)) {
-    console.log("Processing sections array:", data.sections);
-    data.sections.forEach((section: any) => {
-      if (section.type === "news" || (section.title && section.title.toLowerCase().includes("news"))) {
-        result.news = section.content || section.text || "";
-      }
-      if (section.type === "markets" || 
-          (section.title && (section.title.toLowerCase().includes("market") || section.title.toLowerCase().includes("economy")))) {
-        result.markets = section.content || section.text || "";
-      }
-      if (section.type === "copilot" || 
-          (section.title && (section.title.toLowerCase().includes("copilot") || section.title.toLowerCase().includes("ai assistant")))) {
-        result.copilot = section.content || section.text || "";
-      }
-    });
-  }
-  
-  // Check content object if sections are still empty
-  if ((!result.news || !result.markets || !result.copilot) && data.content) {
-    console.log("Checking content object:", data.content);
-    
-    if (typeof data.content === 'object') {
-      result.news = result.news || data.content.news || "";
-      result.markets = result.markets || data.content.markets || data.content.economy || "";
-      result.copilot = result.copilot || data.content.copilot || "";
-    } else if (typeof data.content === 'string') {
-      // If content is a string and we have no sections yet, try to split it
-      if (!result.news && !result.markets && !result.copilot) {
-        const sections = separateAllSectionsFromCombinedText(data.content);
-        result.news = result.news || sections.news;
-        result.markets = result.markets || sections.markets;
-        result.copilot = result.copilot || sections.copilot;
-      }
-    }
-  }
-  
-  // Extract image URLs with various possible property names
-  result.newsImage = result.newsImage || data.newsImage || data.news_image || 
-                    (data.images && data.images.news) || data.webViewLink || null;
-  result.marketsImage = result.marketsImage || data.marketsImage || data.markets_image || 
-                      (data.images && data.images.markets) || null;
-  result.copilotImage = result.copilotImage || data.copilotImage || data.copilot_image || 
-                      (data.images && data.images.copilot) || null;
-}
-
-// Helper function to identify which section a single content string belongs to
-function identifySingleSectionContent(content: string, result: any): void {
-  if (!content) return;
-  
-  // News-related keywords
-  if (content.toLowerCase().includes("news section") || 
-      content.toLowerCase().includes("ai news piece") ||
-      content.toLowerCase().includes("additional news links") ||
-      content.includes("Why this matters:")) {
-    result.news = content;
-    console.log("Identified content as news section based on keywords");
-  } 
-  // Markets-related keywords
-  else if (content.toLowerCase().includes("economy & markets") || 
-           content.toLowerCase().includes("markets section") ||
-           content.includes("🌍 Big Picture") ||
-           content.includes("📈 What to Watch") ||
-           content.includes("🔑 Key Takeaway")) {
-    result.markets = content;
-    console.log("Identified content as markets section based on keywords");
-  } 
-  // Copilot-related keywords
-  else if (content.toLowerCase().includes("copilot section") || 
-           content.toLowerCase().includes("ai copilot") ||
-           content.toLowerCase().includes("time: automate") ||
-           content.toLowerCase().includes("attention: generate") ||
-           content.toLowerCase().includes("profit/progress:")) {
-    result.copilot = content;
-    console.log("Identified content as copilot section based on keywords");
-  }
-  // If no clear identification, try to split by sections if it appears to contain multiple sections
-  else if (content.includes("News Section") && 
-          (content.includes("Economy & Markets") || content.includes("Copilot"))) {
-    const sections = separateAllSectionsFromCombinedText(content);
-    result.news = sections.news || "";
-    result.markets = sections.markets || "";
-    result.copilot = sections.copilot || "";
-    console.log("Split unidentified content into sections");
-  }
-  // If still can't identify, put in news as default
-  else {
-    result.news = content;
-    console.log("Could not identify section type, defaulting to news");
-  }
-}
-
-// Function to regenerate a specific section
+/**
+ * Regenerate a specific section of the newsletter
+ */
 export const regenerateSection = async (
   section: "news" | "markets" | "copilot",
   chatId: string,
   instructions?: string
 ): Promise<string> => {
+  console.log(`Regenerating ${section} section with chat ID:`, chatId);
+  console.log("Instructions:", instructions || "None");
+
   try {
-    console.log(`Regenerating ${section} section with chatId: ${chatId}`);
-    console.log("Instructions:", instructions || "None provided");
-    
-    // Prepare the payload
-    const payload = {
-      chatId,
-      message: `regenerate ${section} section`,
-      instructions: instructions || undefined,
-    };
-    
-    // Make the API request
-    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
+    // Create the message with instructions if provided
+    const message = instructions
+      ? `Regenerate ${section} section with these instructions: ${instructions}`
+      : `Regenerate ${section} section`;
+
+    // Send request to the webhook
+    const response = await fetch(CHAT_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        chatId,
+        message,
+      }),
     });
-    
+
+    // Check if the response is OK
     if (!response.ok) {
-      console.error(`Failed to regenerate ${section} section. Status:`, response.status);
-      throw new Error(`Failed to regenerate ${section} section. Status: ${response.status}`);
+      console.error("Webhook response error:", response.status, response.statusText);
+      throw new Error(`Webhook response error: ${response.statusText}`);
+    }
+
+    // Parse the response
+    const responseData = await response.json();
+    console.log("Section regeneration webhook response data:", responseData);
+
+    // Ensure we have a valid response with text
+    if (!responseData || !responseData.text) {
+      console.error("Invalid webhook response - missing text");
+      throw new Error("Invalid webhook response");
+    }
+
+    // The webhook might return all sections or just the one we want
+    // Try to extract the specific section we requested
+    const sections = separateNewsSections(responseData.text);
+    
+    // Return the specific section content
+    return sections[section] || "";
+  } catch (error) {
+    console.error(`Error regenerating ${section} section:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Generate an image for a specific section using its content
+ */
+export const generateSectionImage = async (
+  section: "news" | "markets" | "copilot", 
+  content: string
+): Promise<string | null> => {
+  if (!content) {
+    console.error(`Cannot generate image for ${section} - no content provided`);
+    return null;
+  }
+
+  console.log(`Generating image for ${section} section`);
+  console.log("Content preview:", content.substring(0, 100) + "...");
+
+  try {
+    // Send request to the image generation webhook
+    const response = await fetch(IMAGE_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        section,
+        content: content.substring(0, 1000), // Limit content length
+      }),
+    });
+
+    // Check if the response is OK
+    if (!response.ok) {
+      console.error("Image webhook response error:", response.status, response.statusText);
+      throw new Error(`Image webhook response error: ${response.statusText}`);
+    }
+
+    // Parse the response
+    const responseData = await response.json();
+    console.log("Image generation response:", responseData);
+
+    // Return the image URL if available
+    if (responseData && responseData.imageUrl) {
+      return responseData.imageUrl;
+    } else {
+      console.warn(`No image URL returned for ${section} section`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error generating image for ${section} section:`, error);
+    return null;
+  }
+};
+
+/**
+ * Separate the newsletter sections from the full text using multiple methods
+ */
+function separateNewsSections(fullText: string): NewsletterSections {
+  console.log("Separating sections from full text...");
+  
+  // Initialize empty sections
+  const sections: NewsletterSections = {
+    news: "",
+    markets: "",
+    copilot: "",
+  };
+  
+  try {
+    // First attempt: Look for explicit section markers
+    // Method 1: Check for standard section headers with markdown
+    const newsPattern1 = /(?:###\s*\*\*News Section\*\*|##\s*News Section|News Section)([\s\S]*?)(?=###\s*\*\*Economy & Markets Section\*\*|##\s*Economy & Markets Section|Economy & Markets Section|###\s*\*\*Copilot\*\*|##\s*Copilot|Copilot Section|$)/i;
+    const marketsPattern1 = /(?:###\s*\*\*Economy & Markets Section\*\*|##\s*Economy & Markets Section|Economy & Markets Section)([\s\S]*?)(?=###\s*\*\*Copilot\*\*|##\s*Copilot|Copilot Section|$)/i;
+    const copilotPattern1 = /(?:###\s*\*\*Copilot\*\*|###\s*\*\*Copilot Section\*\*|##\s*Copilot|Copilot Section)([\s\S]*?)$/i;
+    
+    // Method 2: Look for emoji section headers (used in Markets section)
+    const newsPattern2 = /([\s\S]*?)(?=🌍\s*Big Picture|###\s*🌍\s*Big Picture)/i;
+    const marketsPattern2 = /(?:🌍\s*Big Picture|###\s*🌍\s*Big Picture)([\s\S]*?)(?=TIME:|###\s*\*\*Copilot\*\*|Copilot Section|$)/i;
+    const copilotPattern2 = /(?:TIME:|###\s*\*\*Copilot\*\*|Copilot Section)([\s\S]*?)$/i;
+    
+    // Method 3: Identify by common content patterns
+    const hasNewsIndicators = fullText.includes("News Section") || fullText.includes("Additional News Links");
+    const hasMarketsIndicators = fullText.includes("Big Picture") || fullText.includes("What to Watch") || fullText.includes("Key Takeaway");
+    const hasCopilotIndicators = fullText.includes("TIME:") || fullText.includes("ATTENTION:") || fullText.includes("PROFIT/PROGRESS:") || fullText.includes("Copilot Section");
+    
+    // Try Method 1 first (explicit section headers)
+    let newsMatch = fullText.match(newsPattern1);
+    let marketsMatch = fullText.match(marketsPattern1);
+    let copilotMatch = fullText.match(copilotPattern1);
+    
+    // If not all sections found, try Method 2 (emoji headers)
+    if (!newsMatch?.[1] || !marketsMatch?.[1] || !copilotMatch?.[1]) {
+      newsMatch = fullText.match(newsPattern2);
+      marketsMatch = fullText.match(marketsPattern2);
+      copilotMatch = fullText.match(copilotPattern2);
     }
     
-    const data = await response.json();
-    console.log(`Regenerate ${section} webhook response:`, data);
-    
-    // Extract the content from the response
-    let result = "";
-    
-    if (data && data.output) {
-      if (typeof data.output === "string") {
-        try {
-          // Try to parse the output as JSON
-          const parsedOutput = JSON.parse(data.output);
-          result = parsedOutput[section] || parsedOutput.content || parsedOutput.text || data.output;
-        } catch (error) {
-          // If parsing fails but output contains all sections, separate them
-          if (data.output.includes("News Section") && 
-             (data.output.includes("Economy & Markets Section") || 
-              data.output.includes("Markets Section") || 
-              data.output.includes("Copilot Section"))) {
-            const sections = separateAllSectionsFromCombinedText(data.output);
-            result = sections[section] || data.output;
-          } else {
-            // If no section separation needed, use the string as is
-            result = data.output;
+    // If still not successful, attempt fallback division
+    if (!newsMatch?.[1] || !marketsMatch?.[1] || !copilotMatch?.[1]) {
+      // Check for special markers or dividers like "---"
+      const dividers = fullText.split(/---+/);
+      if (dividers.length >= 3) {
+        // Assume the content is divided by "---" into sections
+        sections.news = dividers[0].trim();
+        sections.markets = dividers[1].trim();
+        sections.copilot = dividers[2].trim();
+        console.log("Used divider method for section separation");
+      } else {
+        // Last resort: Try to identify by content patterns and rough splitting
+        const lines = fullText.split("\n");
+        let currentSection = hasNewsIndicators ? "news" : "";
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          // Try to detect section transitions
+          if ((line.includes("Economy & Markets") || (line.includes("🌍") && line.includes("Big Picture"))) && i > lines.length / 4) {
+            currentSection = "markets";
+            continue;
+          } else if ((line.includes("Copilot") || line.includes("TIME:") || line.includes("ATTENTION:")) && i > lines.length / 2) {
+            currentSection = "copilot";
+            continue;
+          }
+          
+          // Add content to current section
+          if (currentSection) {
+            sections[currentSection as keyof NewsletterSections] += line + "\n";
+          } else if (i < lines.length / 3) {
+            // If no section detected yet and in first third, assume news
+            sections.news += line + "\n";
+            currentSection = "news";
           }
         }
-      } else if (typeof data.output === "object") {
-        // If output is already an object, extract the relevant section
-        result = data.output[section] || data.output.content || data.output.text || "";
-      }
-    }
-    
-    // If no content was found, try one more approach with the raw data
-    if (!result && data) {
-      result = data[section] || data.content || data.text || "";
-    }
-    
-    return result;
-  } catch (error) {
-    console.error(`Error in regenerateSection (${section}):`, error);
-    throw error;
-  }
-};
-
-// Function to generate section image
-export const generateSectionImage = async (section: "news" | "markets" | "copilot", content: string): Promise<string | null> => {
-  try {
-    console.log(`Generating image for ${section} section with content length:`, content.length);
-    
-    // Prepare the payload - add section type for easier identification on webhook side
-    const payload = {
-      section_type: section,
-      news_text: content.substring(0, 1000) // Limit to 1000 chars to avoid payload size issues
-    };
-    
-    console.log(`Image generation payload for ${section}:`, payload);
-    
-    // Make the API request
-    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    
-    if (!response.ok) {
-      console.error(`Failed to generate image for ${section} section. Status:`, response.status);
-      
-      // Try to get error text if available
-      const errorText = await response.text();
-      console.error("Error response body:", errorText);
-      
-      throw new Error(`Failed to generate image for ${section} section. Status: ${response.status}`);
-    }
-    
-    // Get the content type to determine how to parse the response
-    const contentType = response.headers.get("content-type");
-    console.log(`Image generation response content type for ${section}:`, contentType);
-    
-    let result = null;
-    
-    // Handle the response based on content type
-    if (contentType && contentType.includes("application/json")) {
-      const data = await response.json();
-      console.log(`Image generation JSON response for ${section}:`, data);
-      
-      // Look for webViewLink - this is the main property we expect
-      if (data && data.webViewLink) {
-        console.log(`Found webViewLink for ${section}:`, data.webViewLink);
-        result = data.webViewLink;
-      } 
-      // Also check for imageURL property as an alternative
-      else if (data && data.imageURL) {
-        console.log(`Found imageURL for ${section}:`, data.imageURL);
-        result = data.imageURL;
-      }
-      // Look for image URL in other common structures
-      else if (data && data.output && data.output.webViewLink) {
-        console.log(`Found output.webViewLink for ${section}:`, data.output.webViewLink);
-        result = data.output.webViewLink;
-      }
-      // Special case for direct URL return
-      else if (data && typeof data === 'string' && data.startsWith('http')) {
-        console.log(`Found direct URL string for ${section}:`, data);
-        result = data;
-      }
-      // Check for any URL-like property in the response
-      else {
-        console.log(`Searching for URL-like property in response for ${section}`);
-        const urlProps = findUrlProperties(data);
-        if (urlProps.length > 0) {
-          console.log(`Found URL properties for ${section}:`, urlProps);
-          result = urlProps[0].value;
-        } else {
-          console.warn(`No URL found in response for ${section}`);
-        }
+        console.log("Used content pattern fallback for section separation");
       }
     } else {
-      // Not JSON, try to handle as text
-      const textResponse = await response.text();
-      console.log(`Non-JSON response for ${section} image generation:`, textResponse);
-      
-      // Check if the text response is a URL
-      if (textResponse && textResponse.trim().startsWith('http')) {
-        result = textResponse.trim();
-        console.log(`Found URL in text response for ${section}:`, result);
-      } else {
-        console.warn(`No URL found in text response for ${section}`);
-      }
+      // Use the matches from either Method 1 or Method 2
+      sections.news = newsMatch?.[1]?.trim() || "";
+      sections.markets = marketsMatch?.[1]?.trim() || "";
+      sections.copilot = copilotMatch?.[1]?.trim() || "";
+      console.log("Used regex patterns for section separation");
     }
     
-    return result;
+    // Clean up sections
+    sections.news = cleanupSection(sections.news);
+    sections.markets = cleanupSection(sections.markets);
+    sections.copilot = cleanupSection(sections.copilot);
+    
+    // Log the detected sections for debugging
+    console.log("News section length:", sections.news.length);
+    console.log("Markets section length:", sections.markets.length);
+    console.log("Copilot section length:", sections.copilot.length);
+    
+    // Add section headers if they don't exist
+    if (sections.news && !sections.news.includes("News Section")) {
+      sections.news = "### **News Section**\n\n" + sections.news;
+    }
+    if (sections.markets && !sections.markets.includes("Economy & Markets Section")) {
+      sections.markets = "### **Economy & Markets Section**\n\n" + sections.markets;
+    }
+    if (sections.copilot && !sections.copilot.includes("Copilot Section")) {
+      sections.copilot = "### **Copilot Section**\n\n" + sections.copilot;
+    }
+    
+    return sections;
   } catch (error) {
-    console.error(`Error in generateSectionImage (${section}):`, error);
-    throw error;
+    console.error("Error separating newsletter sections:", error);
+    return sections;
   }
-};
-
-// Helper function to recursively find URL properties in an object
-function findUrlProperties(obj: any, path = ''): {path: string, value: string}[] {
-  const results: {path: string, value: string}[] = [];
-  
-  if (!obj || typeof obj !== 'object') return results;
-  
-  for (const [key, value] of Object.entries(obj)) {
-    const currentPath = path ? `${path}.${key}` : key;
-    
-    if (typeof value === 'string' && isUrl(value)) {
-      results.push({path: currentPath, value});
-    } else if (typeof value === 'object' && value !== null) {
-      results.push(...findUrlProperties(value, currentPath));
-    }
-  }
-  
-  return results;
 }
 
-// Helper to check if a string is a URL
-function isUrl(str: string): boolean {
-  try {
-    // Simple check for http/https URLs
-    return /^https?:\/\//i.test(str);
-  } catch (e) {
-    return false;
-  }
+/**
+ * Clean up a section by removing excess whitespace and cleaning up markers
+ */
+function cleanupSection(text: string): string {
+  if (!text) return "";
+  
+  return text
+    .replace(/^\s+|\s+$/g, "") // Trim whitespace
+    .replace(/\n{3,}/g, "\n\n") // Normalize multiple newlines
+    .replace(/---+/g, ""); // Remove dividers
 }

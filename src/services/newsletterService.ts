@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Define types
@@ -18,7 +17,7 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
     
     // Create an AbortController for timeout management
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (increased from 90s)
     
     try {
       // Make the API request with timeout
@@ -41,33 +40,33 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
       const data = await response.json();
       console.log("Newsletter webhook response:", data);
       
-      // Extract the relevant content from the webhook response - handle both array and object formats
-      let result: { news?: string; markets?: string; copilot?: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {};
-      
       // Check if the response is an array (new format)
       if (Array.isArray(data)) {
-        console.log("Response is an array format");
+        console.log("Response is in array format with length:", data.length);
         // Get the first item with output
         const firstItem = data.find(item => item.output);
         
         if (firstItem && firstItem.output) {
+          console.log("Found output in array item:", typeof firstItem.output);
           // Process the output from the array item
-          return processOutputContent(firstItem.output);
+          return extractSectionsFromMarkdown(firstItem.output);
         } else {
           console.error("No output found in array response", data);
           throw new Error("No output found in the webhook response array");
         }
-      } else {
+      } else if (data && data.output) {
         // Handle original object format
-        return processOutputContent(data.output);
+        return extractSectionsFromMarkdown(data.output);
+      } else {
+        console.error("Unexpected response format with no output:", data);
+        throw new Error("Unexpected response format from webhook");
       }
-      
     } catch (error) {
       clearTimeout(timeoutId); // Clear the timeout on error too
       
       if (error.name === 'AbortError') {
-        console.error("Request timed out after 90 seconds");
-        throw new Error("Request timed out after 90 seconds. The webhook might be taking too long to respond.");
+        console.error("Request timed out after 120 seconds");
+        throw new Error("Request timed out after 120 seconds. The webhook might be taking too long to respond.");
       }
       
       throw error; // Re-throw all other errors
@@ -78,166 +77,79 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
   }
 };
 
-// Helper function to process the output content from the webhook response
-function processOutputContent(output: any): { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } {
-  let result: { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {
-    news: "",
-    markets: "",
-    copilot: ""
-  };
+// Extract sections from markdown formatted text - completely rewritten for better reliability
+function extractSectionsFromMarkdown(markdown: string): { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } {
+  console.log("Extracting sections from markdown text:", markdown.substring(0, 100) + "...");
   
-  console.log("Processing output:", typeof output, output instanceof Object ? "is object" : "is not object");
-  
-  if (typeof output === "string") {
-    // Check if this is a JSON string
-    try {
-      const parsedOutput = JSON.parse(output);
-      console.log("Parsed output from string:", parsedOutput);
-      return extractContentFromStructure(parsedOutput);
-    } catch (error) {
-      console.log("Output is not a valid JSON string, processing as raw text");
-      
-      // If this is clearly a markdown formatted string with sections
-      if (output.includes("**News Section**") || output.includes("### **News Section**")) {
-        console.log("Found markdown formatted sections in string");
-        return extractSectionsFromMarkdown(output);
-      } else {
-        // Default to assigning to news section if we can't parse it properly
-        result.news = output;
-      }
-    }
-  } else if (output && typeof output === "object") {
-    // Output is already an object
-    return extractContentFromStructure(output);
-  } else if (!output) {
-    console.error("Empty or null output received");
-    throw new Error("Empty or null content received from webhook");
-  }
-  
-  return result;
-}
-
-// Extract sections from a structured object
-function extractContentFromStructure(data: any): { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } {
-  let result: { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {
-    news: "",
-    markets: "",
-    copilot: ""
-  };
-  
-  // Look for direct section keys in various formats
-  result.news = findContentByKeys(data, ["news", "AI News piece", "newsSection", "News Section"]);
-  result.markets = findContentByKeys(data, ["markets", "economy", "marketsSection", "Economy & Markets Section", "Markets & Economy"]);
-  result.copilot = findContentByKeys(data, ["copilot", "copilotSection", "AI Copilot", "Copilot Section"]);
-  
-  // Check for sections array
-  if (data.sections && Array.isArray(data.sections)) {
-    console.log("Processing sections array:", data.sections);
-    data.sections.forEach((section: any) => {
-      if (!section) return;
-      
-      if (section.type === "news" || 
-         (section.title && section.title.toLowerCase().includes("news"))) {
-        result.news = section.content || section.text || "";
-      }
-      if (section.type === "markets" || 
-         (section.title && (section.title.toLowerCase().includes("market") || 
-                            section.title.toLowerCase().includes("economy")))) {
-        result.markets = section.content || section.text || "";
-      }
-      if (section.type === "copilot" || 
-         (section.title && (section.title.toLowerCase().includes("copilot") || 
-                            section.title.toLowerCase().includes("ai assistant")))) {
-        result.copilot = section.content || section.text || "";
-      }
-    });
-  }
-  
-  // Check for content object as fallback
-  if ((!result.news || !result.markets || !result.copilot) && data.content) {
-    if (typeof data.content === 'object') {
-      if (!result.news) result.news = data.content.news || "";
-      if (!result.markets) result.markets = data.content.markets || data.content.economy || "";
-      if (!result.copilot) result.copilot = data.content.copilot || "";
-    }
-  }
-  
-  // Extract image URLs
-  result.newsImage = findContentByKeys(data, ["newsImage", "news_image", "webViewLink"]);
-  result.marketsImage = findContentByKeys(data, ["marketsImage", "markets_image"]);
-  result.copilotImage = findContentByKeys(data, ["copilotImage", "copilot_image"]);
-  
-  // Check for images in an images object
-  if (data.images) {
-    if (!result.newsImage) result.newsImage = data.images.news || null;
-    if (!result.marketsImage) result.marketsImage = data.images.markets || null;
-    if (!result.copilotImage) result.copilotImage = data.images.copilot || null;
-  }
-  
-  return result;
-}
-
-// Helper function to find content by multiple possible keys
-function findContentByKeys(obj: any, keys: string[]): string | null {
-  if (!obj || typeof obj !== 'object') return null;
-  
-  for (const key of keys) {
-    if (obj[key] !== undefined && obj[key] !== null) {
-      return obj[key];
-    }
-  }
-  return null;
-}
-
-// Extract sections from markdown formatted text
-function extractSectionsFromMarkdown(markdown: string): { news: string; markets: string; copilot: string } {
   const result = {
     news: "",
     markets: "",
-    copilot: ""
+    copilot: "",
+    newsImage: null,
+    marketsImage: null,
+    copilotImage: null
   };
   
+  if (!markdown) {
+    console.error("Empty markdown received");
+    return result;
+  }
+
   // Define patterns to find where each section begins
-  const newsPattern = /(?:##?\s*\*?\*?News\s*Section\*?\*?|##?\s*\*?\*?AI\s*News\*?\*?)/i;
-  const marketsPattern = /(?:##?\s*\*?\*?Economy\s*&\s*Markets\s*Section\*?\*?|##?\s*\*?\*?Markets\s*&\s*Economy\*?\*?)/i;
-  const copilotPattern = /(?:##?\s*\*?\*?Copilot\s*Section\*?\*?|##?\s*\*?\*?AI\s*Copilot\*?\*?)/i;
-  
-  // Find the starting positions of each section
-  const newsMatch = markdown.match(newsPattern);
-  const marketsMatch = markdown.match(marketsPattern);
-  const copilotMatch = markdown.match(copilotPattern);
-  
-  // Extract sections based on their positions in the string
-  if (newsMatch) {
-    const newsStart = newsMatch.index;
-    let newsEnd = markdown.length;
+  const patterns = {
+    news: /(?:##?\s*\*?\*?News\s*Section\*?\*?|##?\s*\*?\*?AI\s*News\*?\*?)/i,
+    markets: /(?:##?\s*\*?\*?Economy\s*&\s*Markets\s*Section\*?\*?|##?\s*\*?\*?Markets\s*&\s*Economy\*?\*?)/i,
+    copilot: /(?:##?\s*\*?\*?Copilot\s*Section\*?\*?|##?\s*\*?\*?AI\s*Copilot\*?\*?)/i
+  };
+
+  // Find each section in the markdown
+  const matches = {
+    news: markdown.match(patterns.news),
+    markets: markdown.match(patterns.markets),
+    copilot: markdown.match(patterns.copilot)
+  };
+
+  // Log what we've found
+  console.log("Section matches found:", {
+    news: matches.news ? matches.news[0] : "not found",
+    markets: matches.markets ? matches.markets[0] : "not found",
+    copilot: matches.copilot ? matches.copilot[0] : "not found"
+  });
+
+  // Get the indexes where each section starts
+  const indexes = {
+    news: matches.news ? matches.news.index : -1,
+    markets: matches.markets ? matches.markets.index : -1,
+    copilot: matches.copilot ? matches.copilot.index : -1
+  };
+
+  // Sort sections by their position in the text
+  const sections = [
+    { name: 'news', index: indexes.news },
+    { name: 'markets', index: indexes.markets },
+    { name: 'copilot', index: indexes.copilot }
+  ].filter(section => section.index !== -1)
+    .sort((a, b) => a.index - b.index);
+
+  console.log("Sorted sections by position:", sections.map(s => s.name));
+
+  // Extract each section based on its position relative to the next section
+  for (let i = 0; i < sections.length; i++) {
+    const currentSection = sections[i];
+    const nextSection = sections[i + 1];
     
-    // If we find another section after news, set the end of news section
-    if (marketsMatch && marketsMatch.index! > newsStart!) {
-      newsEnd = marketsMatch.index!;
-    } else if (copilotMatch && copilotMatch.index! > newsStart!) {
-      newsEnd = copilotMatch.index!;
+    const startIndex = currentSection.index;
+    const endIndex = nextSection ? nextSection.index : markdown.length;
+    
+    if (startIndex !== -1 && startIndex < endIndex) {
+      const content = markdown.substring(startIndex, endIndex).trim();
+      result[currentSection.name] = content;
+      
+      console.log(`Extracted ${currentSection.name} section (${content.length} chars)`);
+      console.log(`${currentSection.name} preview:`, content.substring(0, 50) + "...");
     }
-    
-    result.news = markdown.substring(newsStart!, newsEnd).trim();
   }
-  
-  if (marketsMatch) {
-    const marketsStart = marketsMatch.index;
-    let marketsEnd = markdown.length;
-    
-    // If we find copilot section after markets, set the end of markets section
-    if (copilotMatch && copilotMatch.index! > marketsStart!) {
-      marketsEnd = copilotMatch.index!;
-    }
-    
-    result.markets = markdown.substring(marketsStart!, marketsEnd).trim();
-  }
-  
-  if (copilotMatch) {
-    result.copilot = markdown.substring(copilotMatch.index!).trim();
-  }
-  
+
   return result;
 }
 
@@ -260,7 +172,7 @@ export const regenerateSection = async (
     
     // Create an AbortController for timeout management
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (increased from 60s)
     
     try {
       // Make the API request with timeout
@@ -285,47 +197,30 @@ export const regenerateSection = async (
       
       // Handle array response format (new format)
       if (Array.isArray(data)) {
+        console.log(`Received array response for ${section} regeneration with ${data.length} items`);
         const firstItem = data.find(item => item.output);
         if (firstItem && firstItem.output) {
-          const processed = processOutputContent(firstItem.output);
-          return processed[section] || "";
+          const sectionContent = extractSectionFromText(firstItem.output, section);
+          return sectionContent || "";
+        } else {
+          console.error(`No output found in array response for ${section} regeneration`);
+          throw new Error(`No output found in response for ${section} regeneration`);
         }
       }
       
       // Extract the content from the response (old format)
-      let result = "";
-      
       if (data && data.output) {
-        if (typeof data.output === "string") {
-          try {
-            // Try to parse the output as JSON
-            const parsedOutput = JSON.parse(data.output);
-            result = parsedOutput[section] || parsedOutput.content || parsedOutput.text || data.output;
-          } catch (error) {
-            // If parsing fails, use the string as the content
-            if (data.output.includes(`${section.charAt(0).toUpperCase() + section.slice(1)} Section`)) {
-              result = data.output;
-            } else {
-              result = data.output;
-            }
-          }
-        } else if (typeof data.output === "object") {
-          // If output is already an object, extract the relevant section
-          result = data.output[section] || data.output.content || data.output.text || "";
-        }
+        return extractSectionFromText(data.output, section) || "";
       }
       
-      // If no content was found, try one more approach with the raw data
-      if (!result && data) {
-        result = data[section] || data.content || data.text || "";
-      }
+      console.error(`No usable content found in regenerate ${section} response:`, data);
+      return "";
       
-      return result;
     } catch (error) {
       clearTimeout(timeoutId); // Clear the timeout on error too
       
       if (error.name === 'AbortError') {
-        console.error(`Request timed out after 60 seconds when regenerating ${section} section`);
+        console.error(`Request timed out after 120 seconds when regenerating ${section} section`);
         throw new Error(`Request timed out. The webhook might be taking too long to respond.`);
       }
       
@@ -336,6 +231,57 @@ export const regenerateSection = async (
     throw error;
   }
 };
+
+// Helper function to extract a specific section from text
+function extractSectionFromText(text: string, sectionType: "news" | "markets" | "copilot"): string {
+  console.log(`Extracting ${sectionType} section from text:`, text.substring(0, 100) + "...");
+  
+  // Pattern to find the requested section
+  let sectionPattern: RegExp;
+  
+  switch (sectionType) {
+    case "news":
+      sectionPattern = /(?:##?\s*\*?\*?News\s*Section\*?\*?|##?\s*\*?\*?AI\s*News\*?\*?)/i;
+      break;
+    case "markets":
+      sectionPattern = /(?:##?\s*\*?\*?Economy\s*&\s*Markets\s*Section\*?\*?|##?\s*\*?\*?Markets\s*&\s*Economy\*?\*?)/i;
+      break;
+    case "copilot":
+      sectionPattern = /(?:##?\s*\*?\*?Copilot\s*Section\*?\*?|##?\s*\*?\*?AI\s*Copilot\*?\*?)/i;
+      break;
+  }
+  
+  const sectionMatch = text.match(sectionPattern);
+  if (!sectionMatch) {
+    console.log(`${sectionType} section heading not found in text`);
+    return text; // Return the whole text if section heading not found
+  }
+  
+  const sectionStart = sectionMatch.index;
+  let sectionEnd = text.length;
+  
+  // Look for the next section heading to determine where this section ends
+  const otherSections = [
+    { name: "news", pattern: /(?:##?\s*\*?\*?News\s*Section\*?\*?|##?\s*\*?\*?AI\s*News\*?\*?)/i },
+    { name: "markets", pattern: /(?:##?\s*\*?\*?Economy\s*&\s*Markets\s*Section\*?\*?|##?\s*\*?\*?Markets\s*&\s*Economy\*?\*?)/i },
+    { name: "copilot", pattern: /(?:##?\s*\*?\*?Copilot\s*Section\*?\*?|##?\s*\*?\*?AI\s*Copilot\*?\*?)/i }
+  ].filter(section => section.name !== sectionType);
+  
+  for (const section of otherSections) {
+    const match = text.substring(sectionStart).match(section.pattern);
+    if (match && match.index) {
+      const possibleEnd = sectionStart + match.index;
+      if (possibleEnd < sectionEnd) {
+        sectionEnd = possibleEnd;
+      }
+    }
+  }
+  
+  const sectionContent = text.substring(sectionStart, sectionEnd).trim();
+  console.log(`Extracted ${sectionType} section (${sectionContent.length} chars)`);
+  
+  return sectionContent;
+}
 
 // Function to generate section image with improved timeout
 export const generateSectionImage = async (section: "news" | "markets" | "copilot", content: string): Promise<string | null> => {

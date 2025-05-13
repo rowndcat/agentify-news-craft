@@ -82,8 +82,8 @@ const Index = () => {
       toast.info("Sending request to generate newsletter...");
       
       // Update with a more informative toast that explains the waiting process
-      toast.loading("Processing your newsletter request. This may take up to 30 seconds...", {
-        duration: 30000,
+      toast.loading("Processing your newsletter request. This may take up to 2 minutes...", {
+        duration: 120000, // Increased from 30s to 2min
       });
       
       const result = await generateNewsletter(payload);
@@ -283,7 +283,7 @@ const Index = () => {
         <div className="max-w-4xl mx-auto">
           {isWebhookProcessing && (
             <Announcement 
-              message="Your request is being processed. This may take up to 30 seconds. Please wait..." 
+              message="Your request is being processed. This may take up to 2 minutes. Please wait..." 
               type="info"
             />
           )}

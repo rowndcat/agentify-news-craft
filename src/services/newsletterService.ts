@@ -37,36 +37,31 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
     
     if (data && data.output) {
       console.log("Raw webhook output:", data.output);
-      
-      // Try to separate content into sections using multiple approaches
+
+      // First, try to parse the data.output as JSON
       if (typeof data.output === "string") {
-        // Check if we have "News Section" style content with multiple sections in one string
-        if (data.output.includes("News Section") && 
-            (data.output.includes("Economy & Markets Section") || 
-             data.output.includes("Markets") ||
-             data.output.includes("Copilot"))) {
+        try {
+          const parsedOutput = JSON.parse(data.output);
+          console.log("Parsed webhook output:", parsedOutput);
+          extractSectionsFromObject(parsedOutput, result);
           
-          console.log("Detected multiple sections in a single string response - separating sections");
-          const sections = splitContentIntoSections(data.output);
-          
-          result.news = sections.news || "";
-          result.markets = sections.markets || "";
-          result.copilot = sections.copilot || "";
-          
-          console.log("Successfully separated sections from combined string");
-        } else {
-          try {
-            // Try to parse as JSON if not already detected as multi-section text
-            const parsedOutput = JSON.parse(data.output);
-            console.log("Parsed webhook output:", parsedOutput);
-            extractSectionsFromObject(parsedOutput, result);
-          } catch (error) {
-            console.error("Failed to parse webhook output as JSON:", error);
-            
-            // If parsing fails, check if the string itself can be a single section
-            const outputStr = data.output;
-            identifySingleSectionContent(outputStr, result);
+          // If we have content but the sections aren't separated correctly (all in news)
+          if (result.news && !result.markets && !result.copilot && 
+              (result.news.includes("Economy & Markets Section") || 
+               result.news.includes("Markets Section") || 
+               result.news.includes("Copilot Section"))) {
+            console.log("All content appears to be in news section - attempting to separate");
+            const separatedSections = separateAllSectionsFromCombinedText(result.news);
+            result = { ...result, ...separatedSections };
           }
+        } catch (error) {
+          console.error("Failed to parse webhook output as JSON:", error);
+          
+          // If parsing as JSON fails, try to separate sections directly from the text
+          const outputStr = data.output;
+          console.log("Attempting to separate sections from raw string output");
+          const separatedSections = separateAllSectionsFromCombinedText(outputStr);
+          Object.assign(result, separatedSections);
         }
       } else if (typeof data.output === "object") {
         // Output is already an object
@@ -94,136 +89,130 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
   }
 };
 
+// Helper function to separate all sections from combined text
+function separateAllSectionsFromCombinedText(text: string): { news: string; markets: string; copilot: string } {
+  console.log("Separating all sections from combined text");
+  const result = { news: "", markets: "", copilot: "" };
+
+  // Get section boundaries
+  const newsSectionMatch = findSectionStart(text, [
+    /News Section/i,
+    /\*\*News Section\*\*/i,
+    /### \*\*News Section\*\*/i,
+    /### News Section/i,
+    /## News Section/i
+  ]);
+
+  const marketsSectionMatch = findSectionStart(text, [
+    /Economy & Markets Section/i,
+    /\*\*Economy & Markets Section\*\*/i,
+    /### \*\*Economy & Markets Section\*\*/i,
+    /### Economy & Markets Section/i,
+    /## Economy & Markets Section/i,
+    /Markets Section/i,
+    /\*\*Markets Section\*\*/i,
+    /### \*\*Markets Section\*\*/i,
+    /### Markets Section/i,
+    /## Markets Section/i,
+  ]);
+
+  const copilotSectionMatch = findSectionStart(text, [
+    /Copilot Section/i,
+    /\*\*Copilot Section\*\*/i,
+    /### \*\*Copilot Section\*\*/i,
+    /### Copilot Section/i,
+    /## Copilot Section/i,
+    /\*\*Copilot\*\*/i,
+    /### \*\*Copilot\*\*/i,
+    /### Copilot/i,
+    /## Copilot/i,
+  ]);
+
+  // If we find at least two sections, we can determine the boundaries
+  if (newsSectionMatch && marketsSectionMatch) {
+    result.news = text.substring(newsSectionMatch.index, marketsSectionMatch.index).trim();
+    
+    if (copilotSectionMatch) {
+      result.markets = text.substring(marketsSectionMatch.index, copilotSectionMatch.index).trim();
+      result.copilot = text.substring(copilotSectionMatch.index).trim();
+    } else {
+      result.markets = text.substring(marketsSectionMatch.index).trim();
+    }
+  } 
+  // If we only find news and copilot (missing markets)
+  else if (newsSectionMatch && copilotSectionMatch) {
+    result.news = text.substring(newsSectionMatch.index, copilotSectionMatch.index).trim();
+    result.copilot = text.substring(copilotSectionMatch.index).trim();
+  }
+  // Only news section found
+  else if (newsSectionMatch) {
+    result.news = text.substring(newsSectionMatch.index).trim();
+  }
+  // Fall back to checking for other distinguishing features if section headers aren't found
+  else {
+    // Try to identify sections by markdown separators
+    const parts = text.split(/---+\s*\n/);
+    
+    if (parts.length >= 3) {
+      result.news = parts[0].trim();
+      result.markets = parts[1].trim();
+      result.copilot = parts.slice(2).join("\n").trim();
+    } 
+    // Try to identify by emoji headers which are common in the markets section
+    else if (text.includes("🌍 Big Picture") && text.includes("📈 What to Watch")) {
+      const marketStart = text.indexOf("🌍 Big Picture");
+      const beforeMarkets = text.substring(0, marketStart).trim();
+      
+      if (beforeMarkets.includes("News Section") || 
+          beforeMarkets.includes("**News Section**") ||
+          beforeMarkets.includes("Additional News Links")) {
+        result.news = beforeMarkets;
+      }
+      
+      // Find where copilot might start
+      let copilotStart = text.indexOf("**Copilot");
+      if (copilotStart === -1) copilotStart = text.indexOf("### Copilot");
+      if (copilotStart === -1) copilotStart = text.indexOf("## Copilot");
+      if (copilotStart === -1) copilotStart = text.indexOf("TIME: ");
+      if (copilotStart === -1) copilotStart = text.indexOf("TIME – Reclaim Your");
+      
+      if (copilotStart !== -1) {
+        result.markets = text.substring(marketStart, copilotStart).trim();
+        result.copilot = text.substring(copilotStart).trim();
+      } else {
+        result.markets = text.substring(marketStart).trim();
+      }
+    }
+    // If all else fails, fall back to using the original text as news
+    else {
+      result.news = text.trim();
+    }
+  }
+  
+  // Log the result for debugging
+  console.log("Separation results:");
+  console.log("News section found:", result.news ? "Yes" : "No", result.news ? `(${result.news.length} chars)` : "");
+  console.log("Markets section found:", result.markets ? "Yes" : "No", result.markets ? `(${result.markets.length} chars)` : "");
+  console.log("Copilot section found:", result.copilot ? "Yes" : "No", result.copilot ? `(${result.copilot.length} chars)` : "");
+  
+  return result;
+}
+
+// Helper function to find the start of a section using an array of patterns
+function findSectionStart(text: string, patterns: RegExp[]): { index: number, match: string } | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match.index !== undefined) {
+      return { index: match.index, match: match[0] };
+    }
+  }
+  return null;
+}
+
 // Helper function to split a single text with multiple sections into separate sections
 function splitContentIntoSections(content: string): { news: string; markets: string; copilot: string } {
   console.log("Splitting combined content into sections");
-  const result = { news: "", markets: "", copilot: "" };
-  
-  // Define section identifiers and their boundaries
-  const sections = [
-    {
-      name: "news",
-      startPatterns: [
-        /News Section/i,
-        /\*\*News Section\*\*/i,
-        /### News Section/i,
-        /## News Section/i
-      ],
-      endPatterns: [
-        /Economy & Markets Section/i,
-        /\*\*Economy & Markets Section\*\*/i,
-        /### Economy & Markets/i,
-        /## Economy & Markets/i,
-        /Markets Section/i,
-        /\*\*Markets Section\*\*/i,
-        /### Markets Section/i,
-        /## Markets Section/i,
-        /Copilot Section/i,
-        /\*\*Copilot Section\*\*/i,
-        /\*\*Copilot\*\*/i,
-        /### Copilot/i,
-        /## Copilot/i,
-        /\*\*AI Copilot\*\*/i
-      ]
-    },
-    {
-      name: "markets",
-      startPatterns: [
-        /Economy & Markets Section/i,
-        /\*\*Economy & Markets Section\*\*/i,
-        /### Economy & Markets/i,
-        /## Economy & Markets/i,
-        /Markets Section/i,
-        /\*\*Markets Section\*\*/i,
-        /### Markets Section/i,
-        /## Markets Section/i
-      ],
-      endPatterns: [
-        /Copilot Section/i,
-        /\*\*Copilot Section\*\*/i,
-        /\*\*Copilot\*\*/i,
-        /### Copilot/i,
-        /## Copilot/i,
-        /\*\*AI Copilot\*\*/i
-      ]
-    },
-    {
-      name: "copilot",
-      startPatterns: [
-        /Copilot Section/i,
-        /\*\*Copilot Section\*\*/i,
-        /\*\*Copilot\*\*/i,
-        /### Copilot/i,
-        /## Copilot/i,
-        /\*\*AI Copilot\*\*/i
-      ],
-      endPatterns: []  // No end pattern as copilot is typically the last section
-    }
-  ];
-
-  // Function to find the first matching pattern in text
-  function findFirstMatch(text: string, patterns: RegExp[]): number {
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match && match.index !== undefined) {
-        return match.index;
-      }
-    }
-    return -1;
-  }
-
-  // For each section, try to extract content between its start and end patterns
-  for (const section of sections) {
-    const startIdx = findFirstMatch(content, section.startPatterns);
-    
-    if (startIdx !== -1) {
-      let endIdx = content.length;
-      
-      // If there are end patterns, find the first one that appears after startIdx
-      if (section.endPatterns.length > 0) {
-        for (const endPattern of section.endPatterns) {
-          const match = content.substring(startIdx).match(endPattern);
-          if (match && match.index !== undefined) {
-            const possibleEndIdx = startIdx + match.index;
-            if (possibleEndIdx > startIdx && possibleEndIdx < endIdx) {
-              endIdx = possibleEndIdx;
-            }
-          }
-        }
-      }
-      
-      // Extract the section content
-      const sectionContent = content.substring(startIdx, endIdx).trim();
-      result[section.name as keyof typeof result] = sectionContent;
-      
-      console.log(`Extracted ${section.name} section, length: ${sectionContent.length} characters`);
-    }
-  }
-  
-  // Safety check for empty sections
-  if (!result.news && !result.markets && !result.copilot) {
-    console.warn("Failed to extract any sections using pattern matching");
-    
-    // Last resort: try to split by certain emoji patterns often used in markets sections
-    if (content.includes("🌍 Big Picture") && content.includes("📈 What to Watch")) {
-      const newsEndIndex = content.indexOf("🌍 Big Picture");
-      if (newsEndIndex > 0) {
-        result.news = content.substring(0, newsEndIndex).trim();
-        
-        const copilotStartIndex = content.indexOf("Copilot Section");
-        if (copilotStartIndex > newsEndIndex) {
-          result.markets = content.substring(newsEndIndex, copilotStartIndex).trim();
-          result.copilot = content.substring(copilotStartIndex).trim();
-        } else {
-          result.markets = content.substring(newsEndIndex).trim();
-        }
-        
-        console.log("Split content based on emoji patterns");
-      }
-    }
-  }
-  
-  return result;
+  return separateAllSectionsFromCombinedText(content);
 }
 
 // Helper function to extract sections from an object data structure
@@ -264,7 +253,7 @@ function extractSectionsFromObject(data: any, result: any): void {
     } else if (typeof data.content === 'string') {
       // If content is a string and we have no sections yet, try to split it
       if (!result.news && !result.markets && !result.copilot) {
-        const sections = splitContentIntoSections(data.content);
+        const sections = separateAllSectionsFromCombinedText(data.content);
         result.news = result.news || sections.news;
         result.markets = result.markets || sections.markets;
         result.copilot = result.copilot || sections.copilot;
@@ -314,7 +303,7 @@ function identifySingleSectionContent(content: string, result: any): void {
   // If no clear identification, try to split by sections if it appears to contain multiple sections
   else if (content.includes("News Section") && 
           (content.includes("Economy & Markets") || content.includes("Copilot"))) {
-    const sections = splitContentIntoSections(content);
+    const sections = separateAllSectionsFromCombinedText(content);
     result.news = sections.news || "";
     result.markets = sections.markets || "";
     result.copilot = sections.copilot || "";
@@ -371,8 +360,17 @@ export const regenerateSection = async (
           const parsedOutput = JSON.parse(data.output);
           result = parsedOutput[section] || parsedOutput.content || parsedOutput.text || data.output;
         } catch (error) {
-          // If parsing fails, use the string as the content
-          result = data.output;
+          // If parsing fails but output contains all sections, separate them
+          if (data.output.includes("News Section") && 
+             (data.output.includes("Economy & Markets Section") || 
+              data.output.includes("Markets Section") || 
+              data.output.includes("Copilot Section"))) {
+            const sections = separateAllSectionsFromCombinedText(data.output);
+            result = sections[section] || data.output;
+          } else {
+            // If no section separation needed, use the string as is
+            result = data.output;
+          }
         }
       } else if (typeof data.output === "object") {
         // If output is already an object, extract the relevant section

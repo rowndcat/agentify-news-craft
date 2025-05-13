@@ -77,7 +77,8 @@ const formatMarkdown = (text: string): string => {
     formattedText = formattedText
       .replace(/\*\*7 Additional News Links\*\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
       .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>')
-      .replace(/\*7 additional article links\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">Additional Article Links:</h4>');
+      .replace(/\*7 additional article links\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">Additional Article Links:</h4>')
+      .replace(/7 Additional News Links:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>');
   }
   
   // For Markets section with emoji headers
@@ -160,6 +161,14 @@ const formatMarkdown = (text: string): string => {
       .replace(/TIME: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">TIME: $1</h3>')
       .replace(/ATTENTION: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">ATTENTION: $1</h3>')
       .replace(/PROFIT\/PROGRESS: (.*?)(?=\n|$)/g, '<h3 class="text-lg font-medium mb-2 mt-4">PROFIT/PROGRESS: $1</h3>');
+      
+    // Handle bullet points in copilot section
+    formattedText = formattedText
+      .replace(/- Purpose/g, '<h3 class="text-lg font-medium mb-2 mt-4">Purpose</h3>')
+      .replace(/- Core Functionality/g, '<h3 class="text-lg font-medium mb-2 mt-4">Core Functionality</h3>')
+      .replace(/- Interaction Style/g, '<h3 class="text-lg font-medium mb-2 mt-4">Interaction Style</h3>')
+      .replace(/- Typical User Inputs/g, '<h3 class="text-lg font-medium mb-2 mt-4">Typical User Inputs</h3>')
+      .replace(/- Expected Outputs/g, '<h3 class="text-lg font-medium mb-2 mt-4">Expected Outputs</h3>');
   }
   
   // Replace markdown headers (that haven't been processed already)

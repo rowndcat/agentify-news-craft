@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -203,6 +203,13 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   const [instructions, setInstructions] = useState("");
   const [fullscreenView, setFullscreenView] = useState(false);
 
+  // Add effect to log image URL changes
+  useEffect(() => {
+    if (imageUrl) {
+      console.log(`${title} image URL updated:`, imageUrl);
+    }
+  }, [imageUrl, title]);
+
   const copyToClipboard = async () => {
     try {
       // Strip HTML when copying to clipboard
@@ -215,6 +222,22 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     } catch (error) {
       console.error("Failed to copy content:", error);
       toast.error("Failed to copy content to clipboard.");
+    }
+  };
+
+  // Add function to copy image URL to clipboard
+  const copyImageUrl = async () => {
+    if (!imageUrl) {
+      toast.error(`No ${title} image URL available`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(imageUrl);
+      toast.success(`${title} image URL copied to clipboard!`);
+    } catch (error) {
+      console.error("Failed to copy image URL:", error);
+      toast.error("Failed to copy image URL to clipboard.");
     }
   };
 
@@ -327,11 +350,11 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
           </div>
         </div>
 
-        {/* Image section */}
+        {/* Image URL section - Updated for better visibility and interaction */}
         <div className="px-6 pt-4">
-          <div className="bg-gray-100 rounded-md border border-gray-200 p-2 mb-4">
+          <div className="bg-gray-50 rounded-md border border-gray-200 p-3 mb-4">
             <div className="flex justify-between items-center mb-2">
-              <div className="flex items-center gap-1 text-sm font-medium text-gray-600">
+              <div className="flex items-center gap-1 text-sm font-medium text-gray-700">
                 <Image size={16} />
                 <span>Section Image URL</span>
               </div>
@@ -358,6 +381,19 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                     )}
                   </Button>
                 )}
+                {/* Copy URL Button - only enable when there's an image URL */}
+                {imageUrl && (
+                  <Button
+                    onClick={copyImageUrl}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                    title="Copy image URL to clipboard"
+                  >
+                    <Copy size={16} />
+                    <span>Copy URL</span>
+                  </Button>
+                )}
                 {/* View Image Button - only enable when there's an image URL */}
                 <Button 
                   onClick={handleViewImage} 
@@ -372,46 +408,63 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 </Button>
               </div>
             </div>
-            <div 
-              className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
-            >
+
+            {/* Image URL display area - enhanced to make URLs more prominent */}
+            <div className="min-h-[80px] bg-white rounded border border-gray-100 p-3 flex items-center justify-center overflow-hidden relative">
               {imageUrl ? (
-                <div className="flex flex-col items-center justify-center w-full h-full relative group p-3">
-                  <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors"></div>
-                  <a 
-                    href={imageUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline flex flex-col items-center z-10"
-                  >
-                    <ExternalLink size={24} strokeWidth={1.5} className="mb-2 text-blue-600" />
-                    <span className="text-sm break-all px-4 text-center">Image URL available</span>
-                    <div className="mt-2 max-w-full overflow-hidden">
-                      <span className="text-xs text-blue-700 block px-2 text-center truncate max-w-[280px]">
-                        {imageUrl}
-                      </span>
-                      <span className="text-xs text-blue-600 block mt-1 text-center">
-                        Click to open
-                      </span>
-                    </div>
-                  </a>
+                <div className="flex flex-col items-center justify-center w-full">
+                  <div className="flex items-center gap-2 text-blue-600 mb-2">
+                    <ExternalLink size={18} strokeWidth={1.5} />
+                    <span className="font-medium">Image URL Available</span>
+                  </div>
+                  <div className="max-w-full overflow-hidden px-4">
+                    <a 
+                      href={imageUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-blue-600 hover:underline text-sm block truncate max-w-[90%] mx-auto text-center"
+                    >
+                      {imageUrl}
+                    </a>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2 py-0"
+                      onClick={handleViewImage}
+                    >
+                      Open in new tab
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2 py-0"
+                      onClick={copyImageUrl}
+                    >
+                      Copy URL
+                    </Button>
+                  </div>
                 </div>
               ) : isGeneratingImage ? (
-                <div className="text-gray-400 flex flex-col items-center">
+                <div className="text-gray-500 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
-                  <span className="text-xs mt-1">Generating image URL...</span>
+                  <span className="text-xs mt-2">Generating image URL...</span>
+                  <span className="text-xs mt-1 text-gray-400">This may take a few moments</span>
                 </div>
               ) : isWebhookProcessing ? (
-                <div className="text-gray-400 flex flex-col items-center">
+                <div className="text-gray-500 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
                   <span className="text-xs mt-1">Processing...</span>
                 </div>
               ) : (
-                <div className="text-gray-400 flex flex-col items-center">
-                  <Image size={24} strokeWidth={1.5} />
+                <div className="text-gray-500 flex flex-col items-center">
+                  <Image size={24} strokeWidth={1.5} className="text-gray-400" />
                   <span className="text-xs mt-1">No image URL available</span>
                   {hasContent && onGenerateImage && (
-                    <span className="text-xs mt-1">Click "Generate" to create an image URL</span>
+                    <span className="text-xs mt-1 text-blue-500">
+                      Click "Generate" to create an image URL
+                    </span>
                   )}
                 </div>
               )}

@@ -1,649 +1,285 @@
 
-// Define the section types
+import { toast } from "sonner";
+
+// Define types
 export interface NewsletterSections {
   news: string;
   markets: string;
   copilot: string;
-  newsImage?: string;
-  marketsImage?: string;
-  copilotImage?: string;
 }
 
-// Mock response delay for development
-const MOCK_DELAY = 2000;
-
-// API constants
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.agentify360.com';
-const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
-const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat";
-const IMAGE_WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f";
-
-// Webhook timeout configuration
-const WEBHOOK_WAIT_TIME = 30000; // 30 seconds
-const MAX_POLLING_ATTEMPTS = 10;
-const POLLING_INTERVAL = 3000; // 3 seconds
-
-/**
- * Send a request to generate newsletter content
- */
-export const generateNewsletter = async (payload: any): Promise<NewsletterSections> => {
+// Function to generate the newsletter content
+export const generateNewsletter = async (payload: { chatId: string; message: string }): Promise<any> => {
   try {
-    console.log("Sending webhook request for full newsletter generation to:", WEBHOOK_URL);
+    console.log("Sending generateNewsletter request with payload:", payload);
     
-    // Ensure payload has the correct format with chatId and message
-    const webhookPayload = {
-      chatId: payload.chatId,
-      message: "Generate newsletter"
-    };
+    // Show toast to indicate request is being made
+    toast.info("Sending newsletter generation request...");
     
-    console.log("With webhook payload:", JSON.stringify(webhookPayload));
-    
-    // Send the initial webhook request
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
+    // Make the API request
+    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(webhookPayload)
+      body: JSON.stringify(payload),
     });
     
-    console.log("Webhook request sent, response status:", response.status);
-    
-    // Process direct webhook response if available
-    if (response.ok) {
-      try {
-        const webhookData = await response.json();
-        console.log("Direct webhook response received:", webhookData);
-        
-        // Check if the webhook returned content in the expected format
-        if (webhookData && webhookData.output) {
-          console.log("Found output in direct webhook response, length:", webhookData.output.length);
-          
-          // Parse the webhook output which is a single markdown string with sections
-          const sections = parseWebhookOutput(webhookData.output);
-          
-          // If we have at least one section with content, return it
-          if (sections.news || sections.markets || sections.copilot) {
-            console.log("Successfully parsed sections from direct webhook response");
-            return sections;
-          }
-        }
-      } catch (parseError) {
-        console.error("Error parsing direct webhook response:", parseError);
-      }
+    if (!response.ok) {
+      console.error("Failed to generate newsletter. Status:", response.status);
+      throw new Error(`Failed to generate newsletter. Status: ${response.status}`);
     }
     
-    // If we didn't get parseable content from the direct response, start polling
-    console.log("Starting polling for webhook results...");
+    const data = await response.json();
+    console.log("Newsletter webhook response:", data);
     
-    // Poll for results
-    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
-      console.log(`Polling attempt ${attempt}/${MAX_POLLING_ATTEMPTS}`);
+    // Extract the relevant content from the webhook response
+    let result: { news?: string; markets?: string; copilot?: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {};
+    
+    if (data && data.output) {
+      console.log("Raw webhook output:", data.output);
       
-      try {
-        // Wait for the polling interval
-        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
-        
-        // Make API request to check for results
-        const apiResponse = await fetch(`${API_URL}/check-webhook-result`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`
-          },
-          body: JSON.stringify({ chatId: webhookPayload.chatId }),
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (apiResponse.ok) {
-          const data = await apiResponse.json();
-          console.log(`Polling attempt ${attempt}: Response received:`, data);
+      if (typeof data.output === "string") {
+        try {
+          // Try to parse the output as JSON
+          const parsedOutput = JSON.parse(data.output);
+          console.log("Parsed webhook output:", parsedOutput);
           
-          // If we have content, parse and return it
-          if (data && data.output) {
-            const sections = parseWebhookOutput(data.output);
-            
-            if (sections.news || sections.markets || sections.copilot) {
-              console.log("Successfully parsed sections from polling response");
-              return sections;
-            }
-          } else if (data && data.status === "processing") {
-            console.log("Webhook still processing, continuing to poll...");
-            continue;
-          }
-        } else {
-          console.log(`Polling attempt ${attempt} failed with status: ${apiResponse.status}`);
+          // Check for section content in parsed output
+          result.news = parsedOutput.news || "";
+          result.markets = parsedOutput.markets || "";
+          result.copilot = parsedOutput.copilot || "";
+          
+          // Look for image URLs with multiple possible property names
+          result.newsImage = parsedOutput.newsImage || parsedOutput.news_image || parsedOutput.webViewLink || 
+                            (parsedOutput.images && parsedOutput.images.news) || null;
+          result.marketsImage = parsedOutput.marketsImage || parsedOutput.markets_image || 
+                               (parsedOutput.images && parsedOutput.images.markets) || null;
+          result.copilotImage = parsedOutput.copilotImage || parsedOutput.copilot_image || 
+                               (parsedOutput.images && parsedOutput.images.copilot) || null;
+          
+          console.log("Extracted image URLs:", {
+            newsImage: result.newsImage,
+            marketsImage: result.marketsImage,
+            copilotImage: result.copilotImage
+          });
+        } catch (error) {
+          console.error("Failed to parse webhook output as JSON:", error);
+          // If parsing fails, use the string as the news content
+          result.news = data.output;
         }
-      } catch (pollingError) {
-        console.error(`Polling attempt ${attempt} error:`, pollingError);
+      } else if (typeof data.output === "object") {
+        // Output is already an object
+        console.log("Webhook output is already an object");
+        
+        result.news = data.output.news || "";
+        result.markets = data.output.markets || "";
+        result.copilot = data.output.copilot || "";
+        
+        // Extract image URLs with various possible property names
+        result.newsImage = data.output.newsImage || data.output.news_image || 
+                         (data.output.images && data.output.images.news) || 
+                         data.output.webViewLink || null;
+        result.marketsImage = data.output.marketsImage || data.output.markets_image || 
+                            (data.output.images && data.output.images.markets) || null;
+        result.copilotImage = data.output.copilotImage || data.output.copilot_image || 
+                            (data.output.images && data.output.images.copilot) || null;
+        
+        console.log("Extracted image URLs from object:", {
+          newsImage: result.newsImage,
+          marketsImage: result.marketsImage,
+          copilotImage: result.copilotImage
+        });
       }
     }
     
-    // If we've reached this point, polling has failed to get results
-    console.warn("All polling attempts completed without receiving valid content");
-    
-    // Only use mock data if in development mode
-    if (import.meta.env.DEV) {
-      console.log("Using mock data after all polling attempts failed");
-      return getMockData(webhookPayload);
-    }
-    
-    throw new Error("Failed to get newsletter content after multiple polling attempts");
+    return result;
   } catch (error) {
-    console.error("Error generating newsletter content:", error);
-    
-    if (import.meta.env.DEV) {
-      console.log("Using sample data in development environment as last resort");
-      return getMockData(payload);
-    }
-    
+    console.error("Error in generateNewsletter:", error);
     throw error;
   }
 };
 
-/**
- * Parse webhook output which comes as a single markdown string with sections
- */
-const parseWebhookOutput = (output: string): NewsletterSections => {
-  console.log("Parsing webhook output, first 100 chars:", output.substring(0, 100) + "...");
-  
-  const sections: NewsletterSections = {
-    news: "",
-    markets: "",
-    copilot: ""
-  };
-  
-  try {
-    // Check if the output appears to be valid markdown content
-    if (!output || output.trim().length === 0) {
-      console.warn("Empty output received");
-      return sections;
-    }
-    
-    // Split the output by Markdown section dividers (---)
-    const parts = output.split("---").filter(part => part.trim().length > 0);
-    console.log(`Split output into ${parts.length} parts`);
-    
-    // If we didn't get parts using ---, try to identify sections based on headers
-    if (parts.length <= 1) {
-      console.log("Single part received, trying to split by section headers");
-      
-      // Look for Markdown headers ### that indicate section starts
-      const headerMatches = [...output.matchAll(/#{1,3}\s+\*\*([^*]+)\*\*/g)];
-      if (headerMatches && headerMatches.length > 0) {
-        console.log(`Found ${headerMatches.length} section headers`);
-        
-        // Use the header positions to split the content
-        const sections: string[] = [];
-        headerMatches.forEach((match, i) => {
-          const startPos = match.index;
-          const endPos = i < headerMatches.length - 1 ? headerMatches[i + 1].index : output.length;
-          if (typeof startPos === 'number' && endPos) {
-            sections.push(output.substring(startPos, endPos));
-          }
-        });
-        
-        if (sections.length > 0) {
-          console.log(`Split into ${sections.length} sections using headers`);
-          parts.push(...sections);
-        }
-      }
-    }
-    
-    // Process each part to identify sections
-    parts.forEach((part, index) => {
-      // Clean up the part
-      const trimmedPart = part.trim();
-      console.log(`Processing part ${index + 1}, starts with: ${trimmedPart.substring(0, 30)}...`);
-      
-      // Identify sections based on headers or content
-      if (
-        trimmedPart.includes("**News Section**") || 
-        trimmedPart.includes("### **News Section**") ||
-        trimmedPart.toLowerCase().includes("ai news piece") ||
-        trimmedPart.includes("### News") ||
-        (trimmedPart.toLowerCase().includes("news") && 
-         trimmedPart.toLowerCase().includes("article"))
-      ) {
-        console.log("Found News section");
-        sections.news = trimmedPart;
-      } 
-      else if (
-        trimmedPart.includes("**Economy & Markets Section**") || 
-        trimmedPart.includes("### **Economy & Markets Section**") ||
-        trimmedPart.includes("🌍 Big Picture") ||
-        trimmedPart.includes("### 🌍") ||
-        trimmedPart.includes("### Economy") ||
-        (trimmedPart.toLowerCase().includes("market") && 
-         trimmedPart.toLowerCase().includes("economy"))
-      ) {
-        console.log("Found Markets section");
-        sections.markets = trimmedPart;
-      } 
-      else if (
-        trimmedPart.includes("**Copilot Section**") || 
-        trimmedPart.includes("### **Copilot Section**") ||
-        trimmedPart.includes("**AI Copilot**") ||
-        trimmedPart.includes("### Copilot") ||
-        (trimmedPart.toLowerCase().includes("copilot") && 
-         trimmedPart.toLowerCase().includes("ai"))
-      ) {
-        console.log("Found Copilot section");
-        sections.copilot = trimmedPart;
-      }
-      // If we couldn't identify the section but it's substantial content
-      else if (trimmedPart.length > 200) {
-        console.log("Found unidentified substantial content, analyzing...");
-        
-        // Try to guess the section type based on content
-        if (trimmedPart.toLowerCase().includes("news") && !sections.news) {
-          console.log("Guessing this is News content based on keywords");
-          sections.news = trimmedPart;
-        } 
-        else if ((trimmedPart.toLowerCase().includes("market") || 
-                trimmedPart.toLowerCase().includes("economy")) && 
-                !sections.markets) {
-          console.log("Guessing this is Markets content based on keywords");
-          sections.markets = trimmedPart;
-        }
-        else if ((trimmedPart.toLowerCase().includes("copilot") || 
-                trimmedPart.toLowerCase().includes("insights")) && 
-                !sections.copilot) {
-          console.log("Guessing this is Copilot content based on keywords");
-          sections.copilot = trimmedPart;
-        }
-        // If we still can't identify it but we're missing a section, make a best guess
-        else if (!sections.news) {
-          console.log("Assigning unidentified content to empty News section");
-          sections.news = trimmedPart;
-        }
-        else if (!sections.markets) {
-          console.log("Assigning unidentified content to empty Markets section");
-          sections.markets = trimmedPart;
-        }
-        else if (!sections.copilot) {
-          console.log("Assigning unidentified content to empty Copilot section");
-          sections.copilot = trimmedPart;
-        }
-      }
-    });
-    
-    // Log the extracted sections
-    console.log("Parsed news section:", sections.news ? `${sections.news.substring(0, 50)}...` : "None");
-    console.log("Parsed markets section:", sections.markets ? `${sections.markets.substring(0, 50)}...` : "None");
-    console.log("Parsed copilot section:", sections.copilot ? `${sections.copilot.substring(0, 50)}...` : "None");
-  } catch (error) {
-    console.error("Error parsing sections:", error);
-  }
-  
-  return sections;
-};
-
-/**
- * Regenerate a specific section of the newsletter
- */
+// Function to regenerate a specific section
 export const regenerateSection = async (
-  section: 'news' | 'markets' | 'copilot',
+  section: "news" | "markets" | "copilot",
   chatId: string,
   instructions?: string
 ): Promise<string> => {
   try {
-    console.log(`Regenerating ${section} with instructions:`, instructions);
+    console.log(`Regenerating ${section} section with chatId: ${chatId}`);
+    console.log("Instructions:", instructions || "None provided");
     
-    // Prepare payload for regeneration with proper format
-    const webhookPayload = {
-      chatId: chatId,
-      message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
+    // Prepare the payload
+    const payload = {
+      chatId,
+      message: `regenerate ${section} section`,
+      instructions: instructions || undefined,
     };
     
-    console.log("Sending webhook request to:", WEBHOOK_URL);
-    console.log("With webhook payload:", JSON.stringify(webhookPayload));
-    
-    // Send initial request
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
+    // Make the API request
+    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(webhookPayload)
+      body: JSON.stringify(payload),
     });
     
-    console.log("Webhook request sent, response status:", response.status);
+    if (!response.ok) {
+      console.error(`Failed to regenerate ${section} section. Status:`, response.status);
+      throw new Error(`Failed to regenerate ${section} section. Status: ${response.status}`);
+    }
     
-    // Process direct webhook response if available
-    if (response.ok) {
-      try {
-        const webhookData = await response.json();
-        console.log("Direct webhook response received for regeneration:", webhookData);
-        
-        if (webhookData && webhookData.output) {
-          console.log("Found output in direct webhook response, length:", webhookData.output.length);
-          
-          // Parse the webhook output for the specific section
-          const sections = parseWebhookOutput(webhookData.output);
-          
-          // Return the specific regenerated section if available
-          if (sections[section]) {
-            console.log(`Successfully parsed ${section} section from direct webhook response`);
-            return sections[section];
-          }
+    const data = await response.json();
+    console.log(`Regenerate ${section} webhook response:`, data);
+    
+    // Extract the content from the response
+    let result = "";
+    
+    if (data && data.output) {
+      if (typeof data.output === "string") {
+        try {
+          // Try to parse the output as JSON
+          const parsedOutput = JSON.parse(data.output);
+          result = parsedOutput[section] || parsedOutput.content || parsedOutput.text || data.output;
+        } catch (error) {
+          // If parsing fails, use the string as the content
+          result = data.output;
         }
-      } catch (parseError) {
-        console.error("Error parsing direct webhook regeneration response:", parseError);
+      } else if (typeof data.output === "object") {
+        // If output is already an object, extract the relevant section
+        result = data.output[section] || data.output.content || data.output.text || "";
       }
     }
     
-    // If we didn't get parseable content from the direct response, start polling
-    console.log("Starting polling for regeneration results...");
-    
-    // Poll for results
-    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
-      console.log(`Polling attempt ${attempt}/${MAX_POLLING_ATTEMPTS}`);
-      
-      try {
-        // Wait for the polling interval
-        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
-        
-        // Make API request to check for results
-        const apiResponse = await fetch(`${API_URL}/check-webhook-result`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`
-          },
-          body: JSON.stringify({ chatId: webhookPayload.chatId }),
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (apiResponse.ok) {
-          const data = await apiResponse.json();
-          console.log(`Polling attempt ${attempt}: Response received:`, data);
-          
-          if (data && data.output) {
-            const sections = parseWebhookOutput(data.output);
-            
-            if (sections[section]) {
-              console.log(`Successfully parsed ${section} section from polling response`);
-              return sections[section];
-            }
-          }
-        } else {
-          console.log(`Polling attempt ${attempt} failed with status: ${apiResponse.status}`);
-        }
-      } catch (pollingError) {
-        console.error(`Polling attempt ${attempt} error:`, pollingError);
-      }
-    }
-    
-    // If we've reached this point, polling has failed to get results
-    console.warn("All polling attempts completed without receiving valid section content");
-    
-    // Only use mock data if in development mode
-    if (import.meta.env.DEV) {
-      console.log("Using mock data after all polling attempts failed");
-      const mockData = getMockData({
-        chatId: chatId,
-        message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
-      });
-      return mockData[section];
-    }
-    
-    throw new Error(`Failed to get ${section} section content after multiple polling attempts`);
+    return result;
   } catch (error) {
-    console.error(`Error regenerating ${section}:`, error);
-    
-    // Final fallback to mock data in development
-    if (import.meta.env.DEV) {
-      console.log("DEV mode: Using mock data as final fallback");
-      const mockData = getMockData({
-        chatId: chatId,
-        message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
-      });
-      return mockData[section];
-    }
-    
+    console.error(`Error in regenerateSection (${section}):`, error);
     throw error;
   }
 };
 
-/**
- * Generate an image for a specific section
- */
-export const generateSectionImage = async (
-  section: 'news' | 'markets' | 'copilot',
-  content: string
-): Promise<string | null> => {
+// Function to generate section image
+export const generateSectionImage = async (section: "news" | "markets" | "copilot", content: string): Promise<string | null> => {
   try {
     console.log(`Generating image for ${section} section with content length:`, content.length);
     
-    // Prepare payload for image generation
+    // Prepare the payload - add section type for easier identification on webhook side
     const payload = {
-      section: section,
-      content: content.substring(0, 5000) // Limit content length
+      section_type: section,
+      news_text: content.substring(0, 1000) // Limit to 1000 chars to avoid payload size issues
     };
     
-    console.log("Sending image generation webhook request to:", IMAGE_WEBHOOK_URL);
-    console.log("With content preview:", content.substring(0, 100) + "...");
+    console.log(`Image generation payload for ${section}:`, payload);
     
-    // Send request to the image generation webhook
-    const response = await fetch(IMAGE_WEBHOOK_URL, {
-      method: 'POST',
+    // Make the API request
+    const response = await fetch("https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     
-    console.log("Image webhook request sent, response status:", response.status);
+    if (!response.ok) {
+      console.error(`Failed to generate image for ${section} section. Status:`, response.status);
+      
+      // Try to get error text if available
+      const errorText = await response.text();
+      console.error("Error response body:", errorText);
+      
+      throw new Error(`Failed to generate image for ${section} section. Status: ${response.status}`);
+    }
     
-    if (response.ok) {
-      let imageData: any;
-      try {
-        imageData = await response.json();
-        console.log("Image webhook response full data:", imageData);
-      } catch (err) {
-        console.error("Error parsing webhook response as JSON:", err);
-        // Try to get the response as plain text
-        const textResponse = await response.clone().text();
-        console.log("Response as text:", textResponse);
-        
-        // Check if text is actually a URL
-        if (textResponse.trim().startsWith('http')) {
-          console.log("Found direct URL in text response");
-          return textResponse.trim();
-        }
-        return null;
-      }
+    // Get the content type to determine how to parse the response
+    const contentType = response.headers.get("content-type");
+    console.log(`Image generation response content type for ${section}:`, contentType);
+    
+    let result = null;
+    
+    // Handle the response based on content type
+    if (contentType && contentType.includes("application/json")) {
+      const data = await response.json();
+      console.log(`Image generation JSON response for ${section}:`, data);
       
-      // Enhanced URL extraction - try multiple possible fields
-      if (imageData) {
-        // First check for webViewLink which is the Google Drive format
-        if (typeof imageData.webViewLink === 'string') {
-          console.log("Image generated successfully, webViewLink:", imageData.webViewLink);
-          return imageData.webViewLink;
-        } 
-        
-        // Check for URL in various other common fields
-        const possibleURLFields = [
-          'url', 'link', 'imageUrl', 'image_url', 'image', 
-          'driveLink', 'drive_link', 'webUrl', 'web_url',
-          'href', 'src', 'location'
-        ];
-        
-        // First try to find directly in the root object
-        for (const field of possibleURLFields) {
-          if (typeof imageData[field] === 'string' && imageData[field].startsWith('http')) {
-            console.log(`Found URL in '${field}' field:`, imageData[field]);
-            return imageData[field];
-          }
-        }
-        
-        // Check for string URL in nested objects like data, result, response
-        const nestedFields = ['data', 'result', 'response', 'output', 'content'];
-        for (const nestedField of nestedFields) {
-          if (imageData[nestedField] && typeof imageData[nestedField] === 'object') {
-            for (const urlField of possibleURLFields) {
-              if (typeof imageData[nestedField][urlField] === 'string' && 
-                  imageData[nestedField][urlField].startsWith('http')) {
-                console.log(`Found URL in ${nestedField}.${urlField}:`, imageData[nestedField][urlField]);
-                return imageData[nestedField][urlField];
-              }
-            }
-          }
-        }
-        
-        // If the entire response is a string that looks like a URL
-        if (typeof imageData === 'string' && imageData.startsWith('http')) {
-          console.log("Response is a direct URL string:", imageData);
-          return imageData;
-        }
-        
-        // Last resort - stringify the whole object for debugging
-        console.warn("Couldn't find URL in response. Full response:", JSON.stringify(imageData));
+      // Look for webViewLink - this is the main property we expect
+      if (data && data.webViewLink) {
+        console.log(`Found webViewLink for ${section}:`, data.webViewLink);
+        result = data.webViewLink;
+      } 
+      // Also check for imageURL property as an alternative
+      else if (data && data.imageURL) {
+        console.log(`Found imageURL for ${section}:`, data.imageURL);
+        result = data.imageURL;
       }
-      
-      // For development, return a placeholder image
-      if (import.meta.env.DEV) {
-        console.log("DEV mode: Using placeholder image");
-        return getPlaceholderImage(section);
+      // Look for image URL in other common structures
+      else if (data && data.output && data.output.webViewLink) {
+        console.log(`Found output.webViewLink for ${section}:`, data.output.webViewLink);
+        result = data.output.webViewLink;
       }
-      
-      return null;
+      // Special case for direct URL return
+      else if (data && typeof data === 'string' && data.startsWith('http')) {
+        console.log(`Found direct URL string for ${section}:`, data);
+        result = data;
+      }
+      // Check for any URL-like property in the response
+      else {
+        console.log(`Searching for URL-like property in response for ${section}`);
+        const urlProps = findUrlProperties(data);
+        if (urlProps.length > 0) {
+          console.log(`Found URL properties for ${section}:`, urlProps);
+          result = urlProps[0].value;
+        } else {
+          console.warn(`No URL found in response for ${section}`);
+        }
+      }
     } else {
-      console.error("Failed to get successful response from image webhook:", response.statusText);
+      // Not JSON, try to handle as text
+      const textResponse = await response.text();
+      console.log(`Non-JSON response for ${section} image generation:`, textResponse);
       
-      // Try to log response body for debugging
-      try {
-        const errorText = await response.text();
-        console.error("Error response body:", errorText);
-      } catch (e) {
-        console.error("Could not read error response body");
+      // Check if the text response is a URL
+      if (textResponse && textResponse.trim().startsWith('http')) {
+        result = textResponse.trim();
+        console.log(`Found URL in text response for ${section}:`, result);
+      } else {
+        console.warn(`No URL found in text response for ${section}`);
       }
-      
-      // For development, return a placeholder image
-      if (import.meta.env.DEV) {
-        console.log("DEV mode: Using placeholder image");
-        return getPlaceholderImage(section);
-      }
-      
-      return null;
     }
+    
+    return result;
   } catch (error) {
-    console.error(`Error generating image for ${section}:`, error);
-    
-    // For development, return a placeholder image
-    if (import.meta.env.DEV) {
-      console.log("DEV mode: Using placeholder image due to error");
-      return getPlaceholderImage(section);
-    }
-    
-    return null;
+    console.error(`Error in generateSectionImage (${section}):`, error);
+    throw error;
   }
 };
 
-// Helper to get placeholder images in development
-const getPlaceholderImage = (section: string): string => {
-  switch(section) {
-    case 'news':
-      return "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
-    case 'markets':
-      return "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
-    case 'copilot':
-      return "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
-    default:
-      return "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&h=400";
-  }
-};
-
-// Mock data for development
-const getMockData = (payload: any): NewsletterSections => {
-  console.log("Mock data requested with payload:", payload);
+// Helper function to recursively find URL properties in an object
+function findUrlProperties(obj: any, path = ''): {path: string, value: string}[] {
+  const results: {path: string, value: string}[] = [];
   
-  // If regenerating a specific section
-  if (payload.message?.startsWith('Regenerate')) {
-    const sectionMatch = payload.message.match(/Regenerate\s+(\w+)\s+section/);
-    const section = sectionMatch ? sectionMatch[1] : null;
+  if (!obj || typeof obj !== 'object') return results;
+  
+  for (const [key, value] of Object.entries(obj)) {
+    const currentPath = path ? `${path}.${key}` : key;
     
-    if (section) {
-      const mockData: NewsletterSections = {
-        news: "",
-        markets: "",
-        copilot: "",
-      };
-      
-      const placeholderText = payload.message.includes("instructions:") 
-        ? `Regenerated ${section} content with instructions from webhook: "${payload.message.split('instructions:')[1].trim()}"`
-        : `Regenerated ${section} content from webhook`;
-      
-      mockData[section as keyof NewsletterSections] = getCombinedSectionContent(section, placeholderText);
-      
-      // Add mock image URLs for development
-      if (section === 'news') {
-        mockData.newsImage = "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
-      } else if (section === 'markets') {
-        mockData.marketsImage = "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
-      } else if (section === 'copilot') {
-        mockData.copilotImage = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
-      }
-      
-      return mockData;
+    if (typeof value === 'string' && isUrl(value)) {
+      results.push({path: currentPath, value});
+    } else if (typeof value === 'object' && value !== null) {
+      results.push(...findUrlProperties(value, currentPath));
     }
   }
   
-  // Default is to return full mock newsletter
-  return {
-    news: getCombinedSectionContent('news', 'Content from webhook: Generate newsletter'),
-    markets: getCombinedSectionContent('markets', 'Content from webhook: Generate newsletter'),
-    copilot: getCombinedSectionContent('copilot', 'Content from webhook: Generate newsletter'),
-    newsImage: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400",
-    marketsImage: "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400",
-    copilotImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400"
-  };
-};
+  return results;
+}
 
-// Helper to get content for a specific section
-const getCombinedSectionContent = (section: string, customPrefix: string = ''): string => {
-  const mockContent: Record<string, string> = {
-    news: `
-**News Section**
-
-*AI News piece*:
-${customPrefix || 'Google DeepMind unveiled new AI model capable of reasoning across multiple steps, outperforming previous benchmarks on mathematical problem-solving by 23%. The model combines transformer architecture with a novel retrieval mechanism allowing it to "show its work" during calculations. Industry experts suggest this advance could lead to more reliable AI systems in healthcare diagnostics and scientific research.'}
-
-*7 additional article links*:
-* OpenAI Researchers Publish Paper on Superintelligence Timeline Estimates
-* Microsoft Announces Integration of AI Agents Across Office 365 Suite
-* EU Parliament Passes Comprehensive AI Act with New Safety Requirements
-* Stanford Launches AI Alignment Research Center with $110M Funding
-* Meta's New LLM Can Process Million-Token Documents in One Pass
-* AI-Generated Patent Application Rejected by US Patent Office
-* Japanese Self-Driving Car Startup Raises $220M in Series C Funding
-    `,
-    markets: `
-**Economy & Markets Section**
-
-### 🌍 Big Picture
-${customPrefix || 'Global markets showed resilience this week despite ongoing inflation concerns. The Federal Reserve signaled potential rate adjustments as labor market data indicated cooling employment growth while maintaining low unemployment rates. Asian markets outperformed as China announced new economic stimulus measures focused on domestic consumption.'}
-
-### 📈 What to Watch
-* Semiconductor sector gained 4.8% following positive earnings reports from industry leaders
-* Energy stocks underperformed as crude oil prices declined 2.3% on increased supply forecasts
-* Small-cap stocks showed strong momentum, outpacing large-caps by 1.7% this week
-* European banking sector continues to struggle with profitability challenges
-
-### 🔑 Key Takeaway
-Investor sentiment remains cautiously optimistic as markets navigate conflicting economic signals. While inflation persists above central bank targets, economic growth indicators remain positive, supporting the "soft landing" narrative that has dominated market expectations in recent weeks.
-    `,
-    copilot: `
-**AI Copilot**
-
-${customPrefix || 'Your newsletter aligns well with current market trends showing increased interest in AI infrastructure investments. Consider expanding coverage on semiconductor companies supporting AI development, as this sector has seen a 28% increase in institutional investment over the last quarter.'}
-
-Based on reader engagement metrics, your markets section receives the most click-throughs when focusing on actionable insights rather than general overviews. Consider restructuring to highlight 3-4 specific investment themes with supporting data points.
-
-Recommend incorporating a "Technology Innovation Spotlight" segment highlighting emerging technologies with potential market impact within 6-18 month timeframes. This format has shown 37% higher engagement in comparable financial newsletters according to recent publishing analytics.
-    `
-  };
-
-  return mockContent[section] || '';
-};
+// Helper to check if a string is a URL
+function isUrl(str: string): boolean {
+  try {
+    // Simple check for http/https URLs
+    return /^https?:\/\//i.test(str);
+  } catch (e) {
+    return false;
+  }
+}

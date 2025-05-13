@@ -1,4 +1,3 @@
-
 // Import necessary types
 import { toast } from "sonner";
 
@@ -55,53 +54,139 @@ export const generateNewsletter = async (payload: {
     const responseData = await response.json();
     console.log("Webhook response data received:", responseData);
 
-    // Ensure we have a valid response with text
-    if (!responseData || !responseData.text) {
-      console.error("Invalid webhook response - missing text");
-      throw new Error("Invalid webhook response");
-    }
+    // Log the entire response structure for debugging
+    console.log("Full response structure:", JSON.stringify(responseData, null, 2));
 
-    // Get the response text
-    const fullText = responseData.text;
-    console.log("Full response text length:", fullText.length);
-    console.log("First 100 characters:", fullText.substring(0, 100));
-    console.log("Last 100 characters:", fullText.substring(fullText.length - 100));
+    // Handle different response structures:
 
-    // If the response has 'output' property directly, check if it's a structured object
-    if (responseData.output) {
-      console.log("Output property found in response:", responseData.output);
+    // Case 1: Direct output array response with individual elements (new format)
+    if (Array.isArray(responseData) && responseData.length > 0) {
+      console.log("Detected array response format");
       
-      // If output is already parsed into sections
-      if (typeof responseData.output === 'object' && responseData.output.news) {
-        console.log("Found structured output with news section");
-        return {
-          news: responseData.output.news || "",
-          markets: responseData.output.markets || "",
-          copilot: responseData.output.copilot || "",
-          newsImage: responseData.newsImage || null,
-          marketsImage: responseData.marketsImage || null,
-          copilotImage: responseData.copilotImage || null,
-        };
+      // Try to find an element with 'output' property
+      const outputItem = responseData.find(item => item.output);
+      
+      if (outputItem && outputItem.output) {
+        console.log("Found output item in array:", outputItem);
+        
+        // If the output is a string, parse the string
+        if (typeof outputItem.output === 'string') {
+          const sections = separateNewsSections(outputItem.output);
+          console.log("Parsed sections from array item output:", sections);
+          
+          return {
+            news: sections.news || "",
+            markets: sections.markets || "",
+            copilot: sections.copilot || "",
+            newsImage: null,
+            marketsImage: null,
+            copilotImage: null,
+          };
+        }
+        // If the output is an object, use it directly
+        else if (typeof outputItem.output === 'object') {
+          return {
+            news: outputItem.output.news || "",
+            markets: outputItem.output.markets || "",
+            copilot: outputItem.output.copilot || "",
+            newsImage: outputItem.newsImage || null,
+            marketsImage: outputItem.marketsImage || null,
+            copilotImage: outputItem.copilotImage || null,
+          };
+        }
       }
     }
 
-    // Use the improved parsing logic to separate sections
-    const sections = separateNewsSections(fullText);
-    console.log("Parsed section lengths:", {
-      news: sections.news.length,
-      markets: sections.markets.length,
-      copilot: sections.copilot.length
-    });
+    // Case 2: Regular response with text property (original format)
+    if (responseData && responseData.text) {
+      // Get the response text
+      const fullText = responseData.text;
+      console.log("Full response text length:", fullText.length);
+      console.log("First 100 characters:", fullText.substring(0, 100));
+      console.log("Last 100 characters:", fullText.substring(fullText.length - 100));
 
-    // Return the sections
-    return {
-      news: sections.news || "",
-      markets: sections.markets || "",
-      copilot: sections.copilot || "",
-      newsImage: responseData.newsImage || null,
-      marketsImage: responseData.marketsImage || null,
-      copilotImage: responseData.copilotImage || null,
-    };
+      // If the response has 'output' property directly, check if it's a structured object
+      if (responseData.output) {
+        console.log("Output property found in response:", responseData.output);
+        
+        // If output is already parsed into sections
+        if (typeof responseData.output === 'object' && responseData.output.news) {
+          console.log("Found structured output with news section");
+          return {
+            news: responseData.output.news || "",
+            markets: responseData.output.markets || "",
+            copilot: responseData.output.copilot || "",
+            newsImage: responseData.newsImage || null,
+            marketsImage: responseData.marketsImage || null,
+            copilotImage: responseData.copilotImage || null,
+          };
+        } else if (typeof responseData.output === 'string') {
+          // If output is a string, try to parse it
+          const sections = separateNewsSections(responseData.output);
+          return {
+            news: sections.news || "",
+            markets: sections.markets || "",
+            copilot: sections.copilot || "",
+            newsImage: responseData.newsImage || null,
+            marketsImage: responseData.marketsImage || null,
+            copilotImage: responseData.copilotImage || null,
+          };
+        }
+      }
+
+      // Use the improved parsing logic to separate sections
+      const sections = separateNewsSections(fullText);
+      console.log("Parsed section lengths:", {
+        news: sections.news.length,
+        markets: sections.markets.length,
+        copilot: sections.copilot.length
+      });
+
+      // Return the sections
+      return {
+        news: sections.news || "",
+        markets: sections.markets || "",
+        copilot: sections.copilot || "",
+        newsImage: responseData.newsImage || null,
+        marketsImage: responseData.marketsImage || null,
+        copilotImage: responseData.copilotImage || null,
+      };
+    }
+    
+    // Case 3: If none of the above formats match, try to handle minimal response
+    if (responseData && typeof responseData === 'object') {
+      console.log("Using fallback response handling");
+      
+      // If we have direct output somewhere in the response
+      if (responseData.output) {
+        if (typeof responseData.output === 'string') {
+          const sections = separateNewsSections(responseData.output);
+          return {
+            news: sections.news || "",
+            markets: sections.markets || "",
+            copilot: sections.copilot || "",
+            newsImage: null,
+            marketsImage: null,
+            copilotImage: null,
+          };
+        }
+      }
+      
+      // Last resort: stringify the entire response and try to parse
+      const jsonString = JSON.stringify(responseData);
+      const sections = separateNewsSections(jsonString);
+      
+      return {
+        news: sections.news || "",
+        markets: sections.markets || "",
+        copilot: sections.copilot || "",
+        newsImage: null,
+        marketsImage: null,
+        copilotImage: null,
+      };
+    }
+    
+    throw new Error("Could not parse webhook response format");
   } catch (error) {
     console.error("Error generating newsletter:", error);
     toast.error("Failed to generate newsletter. Please try again.");
@@ -298,27 +383,28 @@ function separateNewsSections(fullText: string): NewsletterSections {
     }
 
     // Try parsing by section headers with variations
-    // News section patterns
+    // News section patterns - Updated for the "### **News Section**" format
     const newsPatterns = [
-      /(?:\*\*News Section\*\*|\bNews Section\b)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
-      /(?:\*\*Title:.*?\*\*)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
-      /(?:BULLET POINTS:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
-      /(?:TL;DR:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i
+      /(?:\*\*News Section\*\*|\bNews Section\b|### \*\*News Section\*\*)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Economy & Markets Section\*\*|### \*\*Copilot Section\*\*|---+|$)/i,
+      /(?:\*\*Title:.*?\*\*)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Economy & Markets Section\*\*|### \*\*Copilot Section\*\*|---+|$)/i,
+      /(?:BULLET POINTS:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Economy & Markets Section\*\*|### \*\*Copilot Section\*\*|---+|$)/i,
+      /(?:TL;DR:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Economy & Markets Section\*\*|### \*\*Copilot Section\*\*|---+|$)/i
     ];
     
-    // Markets section patterns
+    // Markets section patterns - Updated for the "### **Economy & Markets Section**" format
     const marketsPatterns = [
-      /(?:\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
-      /(?:🌍 Big Picture)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i,
-      /(?:📈 What to Watch)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i,
-      /(?:🔑 Key Takeaway)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i
+      /(?:\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|### \*\*Economy & Markets Section\*\*)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Copilot Section\*\*|---+|$)/i,
+      /(?:🌍 Big Picture)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Copilot Section\*\*|TIME:|TIME –|---+|$)/i,
+      /(?:📈 What to Watch)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Copilot Section\*\*|TIME:|TIME –|---+|$)/i,
+      /(?:🔑 Key Takeaway)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Copilot Section\*\*|TIME:|TIME –|---+|$)/i
     ];
     
-    // Copilot section patterns
+    // Copilot section patterns - Updated for the "### **Copilot Section**" format
     const copilotPatterns = [
-      /(?:\*\*Copilot Section\*\*|\bCopilot Section\b)([\s\S]*?)$/i,
+      /(?:\*\*Copilot Section\*\*|\bCopilot Section\b|### \*\*Copilot Section\*\*)([\s\S]*?)$/i,
       /(?:- \*\*Theme: TIME.*?\*\*)([\s\S]*?)$/i,
       /(?:TIME:|TIME –|TIME theme)([\s\S]*?)$/i,
+      /(?:- \*\*TIME:)([\s\S]*?)$/i,
       /(?:ATTENTION.*?theme)([\s\S]*?)$/i,
       /(?:PROFIT\/PROGRESS.*?theme)([\s\S]*?)$/i
     ];
@@ -351,6 +437,17 @@ function separateNewsSections(fullText: string): NewsletterSections {
       }
     }
 
+    // If markets section contains messaging about unavailability, clear it
+    // to prevent showing error messages in the UI
+    if (sections.markets && (
+        sections.markets.includes("generation process") && sections.markets.includes("encountered a stop") ||
+        sections.markets.includes("unavailable") && sections.markets.includes("processing issue") ||
+        sections.markets.includes("Content generation") && sections.markets.includes("unavailable")
+    )) {
+      console.log("Markets section contains unavailability message, clearing it");
+      sections.markets = "";
+    }
+
     // Try divider method if patterns didn't work
     if (!sections.news && !sections.markets && !sections.copilot) {
       console.log("Trying divider method...");
@@ -374,7 +471,7 @@ function separateNewsSections(fullText: string): NewsletterSections {
       // Check for content specific to each section
       const newsKeywords = ["AI News", "News Section", "Title:", "TL;DR", "BULLET POINTS", "Top article"];
       const marketsKeywords = ["Economy & Markets", "Markets Section", "Big Picture", "What to Watch", "Key Takeaway"];
-      const copilotKeywords = ["Copilot Section", "Theme: TIME", "Theme: ATTENTION", "Theme: PROFIT", "PROGRESS"];
+      const copilotKeywords = ["Copilot Section", "Theme: TIME", "Theme: ATTENTION", "Theme: PROFIT", "TIME:", "ATTENTION:", "PROFIT/PROGRESS:"];
       
       // Look for these keywords to identify where sections begin
       let newsStart = -1, marketsStart = -1, copilotStart = -1;
@@ -530,6 +627,9 @@ function cleanupSection(text: string): string {
     .replace(/\n{3,}/g, "\n\n") // Normalize multiple newlines
     .replace(/---+/g, "") // Remove dividers
     .replace(/^\*\*News Section\*\*\s*[\r\n]+/im, '**News Section**\n\n') // Fix News Section header
+    .replace(/^### \*\*News Section\*\*\s*[\r\n]+/im, '**News Section**\n\n') // Fix News Section header with ### prefix
     .replace(/^\*\*Economy & Markets Section\*\*\s*[\r\n]+/im, '**Economy & Markets Section**\n\n') // Fix Markets Section header
-    .replace(/^\*\*Copilot Section\*\*\s*[\r\n]+/im, '**Copilot Section**\n\n'); // Fix Copilot Section header
+    .replace(/^### \*\*Economy & Markets Section\*\*\s*[\r\n]+/im, '**Economy & Markets Section**\n\n') // Fix Markets Section header with ### prefix
+    .replace(/^\*\*Copilot Section\*\*\s*[\r\n]+/im, '**Copilot Section**\n\n') // Fix Copilot Section header
+    .replace(/^### \*\*Copilot Section\*\*\s*[\r\n]+/im, '**Copilot Section**\n\n'); // Fix Copilot Section header with ### prefix
 }

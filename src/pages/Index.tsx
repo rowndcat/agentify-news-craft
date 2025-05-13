@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
-import { generateNewsletter, regenerateSection, NewsletterSections } from "@/services/newsletterService";
+import { generateNewsletter, regenerateSection, NewsletterSections, generateSectionImage } from "@/services/newsletterService";
 import { toast } from "sonner";
 import { ChevronRight, RefreshCw, Sparkles, Files } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -19,6 +18,7 @@ const Index = () => {
   useEffect(() => {
     console.log("Current chat ID:", chatId);
     console.log("Webhook URL to use:", "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat");
+    console.log("Image generation webhook URL:", "https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f");
   }, [chatId]);
   
   const [content, setContent] = useState<NewsletterSections>({
@@ -45,6 +45,17 @@ const Index = () => {
     copilot: boolean;
   }>({
     all: false,
+    news: false,
+    markets: false,
+    copilot: false,
+  });
+
+  // Add state for image generation loading
+  const [isGeneratingImage, setIsGeneratingImage] = useState<{
+    news: boolean;
+    markets: boolean;
+    copilot: boolean;
+  }>({
     news: false,
     markets: false,
     copilot: false,
@@ -178,6 +189,45 @@ const Index = () => {
     navigate('/combined');
   };
 
+  // New function to handle image generation
+  const handleGenerateImage = async (section: keyof NewsletterSections) => {
+    if (!content[section]) {
+      toast.error(`No ${section} content available. Please generate content first.`);
+      return;
+    }
+
+    setIsGeneratingImage(prev => ({ ...prev, [section]: true }));
+    
+    try {
+      toast.info(`Generating image for ${section} section...`);
+      
+      // Display loading toast
+      toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
+        duration: 15000,
+      });
+      
+      // Call the service function to generate the image
+      const imageUrl = await generateSectionImage(section, content[section]);
+      
+      if (imageUrl) {
+        // Update image URL for the specific section
+        setImageUrls(prev => ({
+          ...prev,
+          [section]: imageUrl
+        }));
+        
+        toast.success(`Image for ${section} section generated successfully!`);
+      } else {
+        toast.warning(`No image was returned for the ${section} section. Please try again.`);
+      }
+    } catch (error) {
+      console.error(`Failed to generate image for ${section} section:`, error);
+      toast.error(`Failed to generate image for ${section} section. Please try again.`);
+    } finally {
+      setIsGeneratingImage(prev => ({ ...prev, [section]: false }));
+    }
+  };
+
   // Check if any sections have content
   const hasContent = content.news || content.markets || content.copilot;
 
@@ -265,6 +315,8 @@ const Index = () => {
             icon="news"
             imageUrl={imageUrls.news}
             isWebhookProcessing={isWebhookProcessing}
+            onGenerateImage={() => handleGenerateImage("news")}
+            isGeneratingImage={isGeneratingImage.news}
           />
           
           <NewsletterSection
@@ -275,6 +327,8 @@ const Index = () => {
             icon="markets"
             imageUrl={imageUrls.markets}
             isWebhookProcessing={isWebhookProcessing}
+            onGenerateImage={() => handleGenerateImage("markets")}
+            isGeneratingImage={isGeneratingImage.markets}
           />
           
           <NewsletterSection
@@ -285,6 +339,8 @@ const Index = () => {
             icon="insights"
             imageUrl={imageUrls.copilot}
             isWebhookProcessing={isWebhookProcessing}
+            onGenerateImage={() => handleGenerateImage("copilot")}
+            isGeneratingImage={isGeneratingImage.copilot}
           />
         </div>
       </main>

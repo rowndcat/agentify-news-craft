@@ -29,6 +29,8 @@ interface NewsletterSectionProps {
   icon: "news" | "markets" | "insights";
   imageUrl?: string | null;
   isWebhookProcessing?: boolean;
+  onGenerateImage?: () => void;
+  isGeneratingImage?: boolean;
 }
 
 // Function to format markdown text to HTML
@@ -186,6 +188,8 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   icon,
   imageUrl = null,
   isWebhookProcessing = false,
+  onGenerateImage,
+  isGeneratingImage = false,
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
@@ -319,17 +323,42 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 <Image size={16} />
                 <span>Section Image</span>
               </div>
-              <Button 
-                onClick={handleDownloadImage} 
-                variant="ghost" 
-                size="sm"
-                disabled={!imageUrl || isWebhookProcessing}
-                className="h-8 px-2 flex items-center gap-1 text-xs"
-                title="Download image"
-              >
-                <Download size={16} />
-                <span>Download</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Generate Image Button */}
+                {hasContent && (
+                  <Button
+                    onClick={onGenerateImage}
+                    variant="outline"
+                    size="sm"
+                    disabled={!hasContent || isGeneratingImage || !onGenerateImage}
+                    className="h-8 px-2 flex items-center gap-1 text-xs"
+                  >
+                    {isGeneratingImage ? (
+                      <>
+                        <LoadingSpinner size="xs" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Image size={16} />
+                        <span>Generate</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+                {/* Download Button */}
+                <Button 
+                  onClick={handleDownloadImage} 
+                  variant="ghost" 
+                  size="sm"
+                  disabled={!imageUrl || isWebhookProcessing}
+                  className="h-8 px-2 flex items-center gap-1 text-xs"
+                  title="Download image"
+                >
+                  <Download size={16} />
+                  <span>Download</span>
+                </Button>
+              </div>
             </div>
             <div 
               className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
@@ -340,6 +369,11 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                   alt={`${title} visual`} 
                   className="w-full h-full object-cover"
                 />
+              ) : isGeneratingImage ? (
+                <div className="text-gray-400 flex flex-col items-center">
+                  <LoadingSpinner size="sm" />
+                  <span className="text-xs mt-1">Generating image...</span>
+                </div>
               ) : isWebhookProcessing ? (
                 <div className="text-gray-400 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
@@ -349,6 +383,9 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 <div className="text-gray-400 flex flex-col items-center">
                   <Image size={24} strokeWidth={1.5} />
                   <span className="text-xs mt-1">No image available</span>
+                  {hasContent && onGenerateImage && (
+                    <span className="text-xs mt-1">Click "Generate" to create an image</span>
+                  )}
                 </div>
               )}
             </div>

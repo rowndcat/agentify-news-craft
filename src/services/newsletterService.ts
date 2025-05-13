@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -16,6 +15,7 @@ const MOCK_DELAY = 2000;
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.agentify360.com';
 const API_KEY = import.meta.env.VITE_API_KEY || 'demo-key';
 const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat";
+const IMAGE_WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f";
 
 // Webhook timeout configuration
 const WEBHOOK_WAIT_TIME = 15000; // 15 seconds
@@ -331,6 +331,86 @@ export const regenerateSection = async (
     }
     
     throw error;
+  }
+};
+
+/**
+ * Generate an image for a specific section
+ */
+export const generateSectionImage = async (
+  section: 'news' | 'markets' | 'copilot',
+  content: string
+): Promise<string | null> => {
+  try {
+    console.log(`Generating image for ${section} section with content length:`, content.length);
+    
+    // Prepare payload for image generation
+    const payload = {
+      section: section,
+      content: content
+    };
+    
+    console.log("Sending image generation webhook request to:", IMAGE_WEBHOOK_URL);
+    console.log("With content preview:", content.substring(0, 100) + "...");
+    
+    // Send request to the image generation webhook
+    const response = await fetch(IMAGE_WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    console.log("Image webhook request sent, response status:", response.status);
+    
+    if (response.ok) {
+      const imageData = await response.json();
+      console.log("Image webhook response:", imageData);
+      
+      // Check if the webhook returned a Google Drive webViewLink
+      if (imageData && imageData.webViewLink) {
+        console.log("Image generated successfully, webViewLink:", imageData.webViewLink);
+        return imageData.webViewLink;
+      } else {
+        console.error("No webViewLink in the response");
+        return null;
+      }
+    } else {
+      console.error("Failed to get successful response from image webhook:", response.statusText);
+      
+      // For development, return a placeholder image
+      if (import.meta.env.DEV) {
+        console.log("DEV mode: Using placeholder image");
+        return getPlaceholderImage(section);
+      }
+      
+      return null;
+    }
+  } catch (error) {
+    console.error(`Error generating image for ${section}:`, error);
+    
+    // For development, return a placeholder image
+    if (import.meta.env.DEV) {
+      console.log("DEV mode: Using placeholder image due to error");
+      return getPlaceholderImage(section);
+    }
+    
+    return null;
+  }
+};
+
+// Helper to get placeholder images in development
+const getPlaceholderImage = (section: string): string => {
+  switch(section) {
+    case 'news':
+      return "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
+    case 'markets':
+      return "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
+    case 'copilot':
+      return "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+    default:
+      return "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&h=400";
   }
 };
 

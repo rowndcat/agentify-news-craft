@@ -47,7 +47,7 @@ export const generateNewsletter = async (payload: {
 
     // Parse the response
     const responseData = await response.json();
-    console.log("Webhook response data:", responseData);
+    console.log("Webhook response data received:", responseData);
 
     // Ensure we have a valid response with text
     if (!responseData || !responseData.text) {
@@ -57,11 +57,17 @@ export const generateNewsletter = async (payload: {
 
     // Get the response text
     const fullText = responseData.text;
-    console.log("Full response text:", fullText);
+    console.log("Full response text length:", fullText.length);
+    console.log("First 100 characters:", fullText.substring(0, 100));
+    console.log("Last 100 characters:", fullText.substring(fullText.length - 100));
 
-    // Separate the sections with advanced parsing logic
+    // Use the improved parsing logic to separate sections
     const sections = separateNewsSections(fullText);
-    console.log("Parsed sections:", sections);
+    console.log("Parsed section lengths:", {
+      news: sections.news.length,
+      markets: sections.markets.length,
+      copilot: sections.copilot.length
+    });
 
     // Return the sections
     return {
@@ -74,6 +80,7 @@ export const generateNewsletter = async (payload: {
     };
   } catch (error) {
     console.error("Error generating newsletter:", error);
+    toast.error("Failed to generate newsletter. Please try again.");
     throw error;
   }
 };
@@ -95,7 +102,16 @@ export const regenerateSection = async (
       ? `Regenerate ${section} section with these instructions: ${instructions}`
       : `Regenerate ${section} section`;
 
-    // Send request to the webhook
+    // Log the request payload
+    console.log("Regenerate section request payload:", {
+      chatId,
+      message
+    });
+
+    // Send request to the webhook with a longer timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
     const response = await fetch(CHAT_WEBHOOK_URL, {
       method: "POST",
       headers: {
@@ -105,7 +121,10 @@ export const regenerateSection = async (
         chatId,
         message,
       }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     // Check if the response is OK
     if (!response.ok) {
@@ -127,10 +146,19 @@ export const regenerateSection = async (
     // Try to extract the specific section we requested
     const sections = separateNewsSections(responseData.text);
     
+    console.log(`Extracted ${section} section length:`, sections[section]?.length || 0);
+    
+    // If we don't have the specific section, use the full text as a fallback
+    if (!sections[section] || sections[section].trim().length === 0) {
+      console.log("Using full text as fallback for section");
+      return responseData.text.trim();
+    }
+    
     // Return the specific section content
     return sections[section] || "";
   } catch (error) {
     console.error(`Error regenerating ${section} section:`, error);
+    toast.error(`Failed to regenerate ${section} section. Please try again.`);
     throw error;
   }
 };
@@ -151,7 +179,10 @@ export const generateSectionImage = async (
   console.log("Content preview:", content.substring(0, 100) + "...");
 
   try {
-    // Send request to the image generation webhook
+    // Send request to the image generation webhook with a longer timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
     const response = await fetch(IMAGE_WEBHOOK_URL, {
       method: "POST",
       headers: {
@@ -161,7 +192,10 @@ export const generateSectionImage = async (
         section,
         content: content.substring(0, 1000), // Limit content length
       }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     // Check if the response is OK
     if (!response.ok) {
@@ -200,100 +234,159 @@ function separateNewsSections(fullText: string): NewsletterSections {
   };
   
   try {
-    // First attempt: Look for explicit section markers
-    // Method 1: Check for standard section headers with markdown
-    const newsPattern1 = /(?:###\s*\*\*News Section\*\*|##\s*News Section|News Section)([\s\S]*?)(?=###\s*\*\*Economy & Markets Section\*\*|##\s*Economy & Markets Section|Economy & Markets Section|###\s*\*\*Copilot\*\*|##\s*Copilot|Copilot Section|$)/i;
-    const marketsPattern1 = /(?:###\s*\*\*Economy & Markets Section\*\*|##\s*Economy & Markets Section|Economy & Markets Section)([\s\S]*?)(?=###\s*\*\*Copilot\*\*|##\s*Copilot|Copilot Section|$)/i;
-    const copilotPattern1 = /(?:###\s*\*\*Copilot\*\*|###\s*\*\*Copilot Section\*\*|##\s*Copilot|Copilot Section)([\s\S]*?)$/i;
-    
-    // Method 2: Look for emoji section headers (used in Markets section)
-    const newsPattern2 = /([\s\S]*?)(?=🌍\s*Big Picture|###\s*🌍\s*Big Picture)/i;
-    const marketsPattern2 = /(?:🌍\s*Big Picture|###\s*🌍\s*Big Picture)([\s\S]*?)(?=TIME:|###\s*\*\*Copilot\*\*|Copilot Section|$)/i;
-    const copilotPattern2 = /(?:TIME:|###\s*\*\*Copilot\*\*|Copilot Section)([\s\S]*?)$/i;
-    
-    // Method 3: Identify by common content patterns
-    const hasNewsIndicators = fullText.includes("News Section") || fullText.includes("Additional News Links");
-    const hasMarketsIndicators = fullText.includes("Big Picture") || fullText.includes("What to Watch") || fullText.includes("Key Takeaway");
-    const hasCopilotIndicators = fullText.includes("TIME:") || fullText.includes("ATTENTION:") || fullText.includes("PROFIT/PROGRESS:") || fullText.includes("Copilot Section");
-    
-    // Try Method 1 first (explicit section headers)
-    let newsMatch = fullText.match(newsPattern1);
-    let marketsMatch = fullText.match(marketsPattern1);
-    let copilotMatch = fullText.match(copilotPattern1);
-    
-    // If not all sections found, try Method 2 (emoji headers)
-    if (!newsMatch?.[1] || !marketsMatch?.[1] || !copilotMatch?.[1]) {
-      newsMatch = fullText.match(newsPattern2);
-      marketsMatch = fullText.match(marketsPattern2);
-      copilotMatch = fullText.match(copilotPattern2);
-    }
-    
-    // If still not successful, attempt fallback division
-    if (!newsMatch?.[1] || !marketsMatch?.[1] || !copilotMatch?.[1]) {
-      // Check for special markers or dividers like "---"
+    // Log full text for debugging
+    console.log("Full text to separate:", fullText.substring(0, 200) + "...");
+
+    // Check for specific section markers with markdown or plain text
+    const newsPattern = /(?:\*\*News Section\*\*|\bNews Section\b)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i;
+    const marketsPattern = /(?:\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i;
+    const copilotPattern = /(?:\*\*Copilot Section\*\*|\bCopilot Section\b)([\s\S]*?)$/i;
+
+    // Extract sections using the patterns
+    const newsMatch = fullText.match(newsPattern);
+    const marketsMatch = fullText.match(marketsPattern);
+    const copilotMatch = fullText.match(copilotPattern);
+
+    console.log("News section match:", newsMatch ? "found" : "not found");
+    console.log("Markets section match:", marketsMatch ? "found" : "not found");
+    console.log("Copilot section match:", copilotMatch ? "found" : "not found");
+
+    // Look for section dividers if direct patterns didn't work
+    if (!newsMatch && !marketsMatch && !copilotMatch) {
+      console.log("Trying divider method...");
+      // Try divider method (---) which is often used to separate sections
       const dividers = fullText.split(/---+/);
+      
       if (dividers.length >= 3) {
-        // Assume the content is divided by "---" into sections
-        sections.news = dividers[0].trim();
-        sections.markets = dividers[1].trim();
-        sections.copilot = dividers[2].trim();
-        console.log("Used divider method for section separation");
-      } else {
-        // Last resort: Try to identify by content patterns and rough splitting
-        const lines = fullText.split("\n");
-        let currentSection = hasNewsIndicators ? "news" : "";
+        // If we have at least 3 sections separated by dividers
+        // Assume the ordering: news, markets, copilot
+        sections.news = cleanupSection(dividers[0]);
+        sections.markets = cleanupSection(dividers[1]);
+        sections.copilot = cleanupSection(dividers.slice(2).join("\n---\n"));  // Combine any additional dividers
         
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          
-          // Try to detect section transitions
-          if ((line.includes("Economy & Markets") || (line.includes("🌍") && line.includes("Big Picture"))) && i > lines.length / 4) {
-            currentSection = "markets";
-            continue;
-          } else if ((line.includes("Copilot") || line.includes("TIME:") || line.includes("ATTENTION:")) && i > lines.length / 2) {
-            currentSection = "copilot";
-            continue;
-          }
-          
-          // Add content to current section
-          if (currentSection) {
-            sections[currentSection as keyof NewsletterSections] += line + "\n";
-          } else if (i < lines.length / 3) {
-            // If no section detected yet and in first third, assume news
-            sections.news += line + "\n";
-            currentSection = "news";
-          }
-        }
-        console.log("Used content pattern fallback for section separation");
+        console.log("Used divider method for section separation");
       }
     } else {
-      // Use the matches from either Method 1 or Method 2
-      sections.news = newsMatch?.[1]?.trim() || "";
-      sections.markets = marketsMatch?.[1]?.trim() || "";
-      sections.copilot = copilotMatch?.[1]?.trim() || "";
+      // Use the regex matches if available
+      if (newsMatch && newsMatch[1]) {
+        sections.news = cleanupSection(newsMatch[1]);
+      }
+      
+      if (marketsMatch && marketsMatch[1]) {
+        sections.markets = cleanupSection(marketsMatch[1]);
+      }
+      
+      if (copilotMatch && copilotMatch[1]) {
+        sections.copilot = cleanupSection(copilotMatch[1]);
+      }
+      
       console.log("Used regex patterns for section separation");
     }
+
+    // If we still don't have all sections, try looking for alternative headers
+    if (!sections.news || !sections.markets || !sections.copilot) {
+      console.log("Some sections still missing, trying alternative headers...");
+      
+      // Look for content indicators specific to each section
+      const titlePattern = /\*\*Title:(.*?)\*\*/;
+      const bulletPointsPattern = /BULLET POINTS:/;
+      const bigPicturePattern = /🌍 Big Picture/;
+      const timeThemePattern = /TIME:|TIME –|TIME theme/i;
+      
+      // If we don't have news content but can find title/bullet points
+      if (!sections.news && (fullText.match(titlePattern) || fullText.match(bulletPointsPattern))) {
+        // Extract from the start until we find a markets or copilot indicator
+        const endIndex = fullText.search(/(?:Economy & Markets|🌍 Big Picture|Copilot Section|TIME:|TIME –)/i);
+        if (endIndex > 0) {
+          sections.news = cleanupSection(fullText.substring(0, endIndex));
+        }
+      }
+      
+      // If we don't have markets content but can find big picture
+      if (!sections.markets && fullText.match(bigPicturePattern)) {
+        const startIndex = fullText.search(/(?:🌍 Big Picture)/i);
+        const endIndex = fullText.search(/(?:Copilot Section|TIME:|TIME –)/i);
+        if (startIndex > 0 && endIndex > startIndex) {
+          sections.markets = cleanupSection(fullText.substring(startIndex, endIndex));
+        }
+      }
+      
+      // If we don't have copilot content but can find TIME theme
+      if (!sections.copilot && fullText.match(timeThemePattern)) {
+        const startIndex = fullText.search(/(?:TIME:|TIME –|TIME theme)/i);
+        if (startIndex > 0) {
+          sections.copilot = cleanupSection(fullText.substring(startIndex));
+        }
+      }
+      
+      console.log("After alternative headers search:");
+      console.log("News found:", Boolean(sections.news));
+      console.log("Markets found:", Boolean(sections.markets));
+      console.log("Copilot found:", Boolean(sections.copilot));
+    }
     
-    // Clean up sections
-    sections.news = cleanupSection(sections.news);
-    sections.markets = cleanupSection(sections.markets);
-    sections.copilot = cleanupSection(sections.copilot);
+    // Fallback: If all else fails, try to split text into roughly equal thirds
+    if (!sections.news && !sections.markets && !sections.copilot) {
+      console.log("No sections found through patterns, using fallback division method");
+      
+      const lines = fullText.split("\n");
+      const segmentSize = Math.floor(lines.length / 3);
+      
+      sections.news = cleanupSection(lines.slice(0, segmentSize).join("\n"));
+      sections.markets = cleanupSection(lines.slice(segmentSize, segmentSize * 2).join("\n"));
+      sections.copilot = cleanupSection(lines.slice(segmentSize * 2).join("\n"));
+    }
     
-    // Log the detected sections for debugging
-    console.log("News section length:", sections.news.length);
-    console.log("Markets section length:", sections.markets.length);
-    console.log("Copilot section length:", sections.copilot.length);
+    // If any section is still empty, use the full text for that section
+    if (!sections.news && !sections.markets && !sections.copilot) {
+      console.log("All section detection methods failed, using full text as news section");
+      sections.news = cleanupSection(fullText);
+    } else if (!sections.news && !sections.markets) {
+      console.log("News and markets sections not found, splitting remaining content");
+      const remainingText = fullText.replace(sections.copilot, "");
+      const midpoint = Math.floor(remainingText.length / 2);
+      sections.news = cleanupSection(remainingText.substring(0, midpoint));
+      sections.markets = cleanupSection(remainingText.substring(midpoint));
+    } else if (!sections.news && !sections.copilot) {
+      console.log("News and copilot sections not found, splitting remaining content");
+      const remainingText = fullText.replace(sections.markets, "");
+      const midpoint = Math.floor(remainingText.length / 2);
+      sections.news = cleanupSection(remainingText.substring(0, midpoint));
+      sections.copilot = cleanupSection(remainingText.substring(midpoint));
+    } else if (!sections.markets && !sections.copilot) {
+      console.log("Markets and copilot sections not found, splitting remaining content");
+      const remainingText = fullText.replace(sections.news, "");
+      const midpoint = Math.floor(remainingText.length / 2);
+      sections.markets = cleanupSection(remainingText.substring(0, midpoint));
+      sections.copilot = cleanupSection(remainingText.substring(midpoint));
+    } else if (!sections.news) {
+      console.log("News section not found, using remaining text");
+      sections.news = cleanupSection(fullText.replace(sections.markets, "").replace(sections.copilot, ""));
+    } else if (!sections.markets) {
+      console.log("Markets section not found, using remaining text");
+      sections.markets = cleanupSection(fullText.replace(sections.news, "").replace(sections.copilot, ""));
+    } else if (!sections.copilot) {
+      console.log("Copilot section not found, using remaining text");
+      sections.copilot = cleanupSection(fullText.replace(sections.news, "").replace(sections.markets, ""));
+    }
     
     // Add section headers if they don't exist
     if (sections.news && !sections.news.includes("News Section")) {
-      sections.news = "### **News Section**\n\n" + sections.news;
+      sections.news = "**News Section**\n\n" + sections.news;
     }
-    if (sections.markets && !sections.markets.includes("Economy & Markets Section")) {
-      sections.markets = "### **Economy & Markets Section**\n\n" + sections.markets;
+    
+    if (sections.markets && !sections.markets.includes("Economy & Markets")) {
+      sections.markets = "**Economy & Markets Section**\n\n" + sections.markets;
     }
-    if (sections.copilot && !sections.copilot.includes("Copilot Section")) {
-      sections.copilot = "### **Copilot Section**\n\n" + sections.copilot;
+    
+    if (sections.copilot && !sections.copilot.includes("Copilot")) {
+      sections.copilot = "**Copilot Section**\n\n" + sections.copilot;
     }
+    
+    console.log("Final section lengths after all processing:");
+    console.log("News section:", sections.news.length);
+    console.log("Markets section:", sections.markets.length);
+    console.log("Copilot section:", sections.copilot.length);
     
     return sections;
   } catch (error) {
@@ -311,5 +404,8 @@ function cleanupSection(text: string): string {
   return text
     .replace(/^\s+|\s+$/g, "") // Trim whitespace
     .replace(/\n{3,}/g, "\n\n") // Normalize multiple newlines
-    .replace(/---+/g, ""); // Remove dividers
+    .replace(/---+/g, "") // Remove dividers
+    .replace(/^\*\*News Section\*\*\s*[\r\n]+/im, '**News Section**\n\n') // Fix News Section header
+    .replace(/^\*\*Economy & Markets Section\*\*\s*[\r\n]+/im, '**Economy & Markets Section**\n\n') // Fix Markets Section header
+    .replace(/^\*\*Copilot Section\*\*\s*[\r\n]+/im, '**Copilot Section**\n\n'); // Fix Copilot Section header
 }

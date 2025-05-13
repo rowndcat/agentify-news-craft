@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -202,7 +203,7 @@ const Index = () => {
 
     // Check if we already have an image URL for this section
     if (imageUrls[section]) {
-      toast.info(`Image for ${section} section already exists. Opening in new tab...`);
+      toast.info(`Image URL for ${section} section already exists. Opening in new tab...`);
       window.open(imageUrls[section] as string, '_blank');
       return;
     }
@@ -210,10 +211,10 @@ const Index = () => {
     setIsGeneratingImage(prev => ({ ...prev, [section]: true }));
     
     try {
-      toast.info(`Generating image for ${section} section...`);
+      toast.info(`Generating image URL for ${section} section...`);
       
       // Display loading toast
-      const loadingToast = toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
+      const loadingToastId = toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
         duration: 15000,
       });
       
@@ -221,7 +222,7 @@ const Index = () => {
       const imageUrl = await generateSectionImage(section, content[section]);
       
       // Dismiss the loading toast
-      toast.dismiss(loadingToast);
+      toast.dismiss(loadingToastId);
       
       if (imageUrl) {
         console.log(`Received image URL for ${section}:`, imageUrl);
@@ -232,13 +233,17 @@ const Index = () => {
           [section]: imageUrl
         }));
         
-        toast.success(`Image for ${section} section generated successfully!`);
+        toast.success(`Image URL for ${section} section generated successfully!`);
+        
+        // Log the URL for debugging
+        console.log(`${section} image URL set to:`, imageUrl);
       } else {
-        toast.warning(`No image was returned for the ${section} section. Please try again.`);
+        toast.warning(`No image URL was returned for the ${section} section. Please try again.`);
+        console.warn(`No image URL returned for ${section} section`);
       }
     } catch (error) {
-      console.error(`Failed to generate image for ${section} section:`, error);
-      toast.error(`Failed to generate image for ${section} section. Please try again.`);
+      console.error(`Failed to generate image URL for ${section} section:`, error);
+      toast.error(`Failed to generate image URL for ${section} section. Please try again.`);
     } finally {
       setIsGeneratingImage(prev => ({ ...prev, [section]: false }));
     }

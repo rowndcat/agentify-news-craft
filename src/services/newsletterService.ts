@@ -437,52 +437,69 @@ export const generateSectionImage = async (
     console.log("Image webhook request sent, response status:", response.status);
     
     if (response.ok) {
-      const imageData = await response.json();
-      console.log("Image webhook response:", imageData);
-      
-      // Check if the webhook returned a Google Drive webViewLink
-      if (imageData && imageData.webViewLink) {
-        console.log("Image generated successfully, webViewLink:", imageData.webViewLink);
-        return imageData.webViewLink;
-      } 
-      // Check for iconLink which is also provided by Google Drive
-      else if (imageData && imageData.iconLink) {
-        console.log("Image generated, using iconLink:", imageData.iconLink);
-        return imageData.iconLink;
-      }
-      // Check for any URL in the response
-      else if (imageData && typeof imageData === 'object') {
-        // Log all keys to help with debugging
-        console.log("Image response keys:", Object.keys(imageData));
+      let imageData: any;
+      try {
+        imageData = await response.json();
+        console.log("Image webhook response full data:", imageData);
+      } catch (err) {
+        console.error("Error parsing webhook response as JSON:", err);
+        // Try to get the response as plain text
+        const textResponse = await response.clone().text();
+        console.log("Response as text:", textResponse);
         
-        // Try to find any URL-like value in the response
-        for (const key of Object.keys(imageData)) {
-          const value = imageData[key];
-          if (typeof value === 'string' && value.startsWith('http')) {
-            console.log(`Found URL in '${key}' field:`, value);
-            return value;
+        // Check if text is actually a URL
+        if (textResponse.trim().startsWith('http')) {
+          console.log("Found direct URL in text response");
+          return textResponse.trim();
+        }
+        return null;
+      }
+      
+      // Enhanced URL extraction - try multiple possible fields
+      if (imageData) {
+        // First check for webViewLink which is the Google Drive format
+        if (typeof imageData.webViewLink === 'string') {
+          console.log("Image generated successfully, webViewLink:", imageData.webViewLink);
+          return imageData.webViewLink;
+        } 
+        
+        // Check for URL in various other common fields
+        const possibleURLFields = [
+          'url', 'link', 'imageUrl', 'image_url', 'image', 
+          'driveLink', 'drive_link', 'webUrl', 'web_url',
+          'href', 'src', 'location'
+        ];
+        
+        // First try to find directly in the root object
+        for (const field of possibleURLFields) {
+          if (typeof imageData[field] === 'string' && imageData[field].startsWith('http')) {
+            console.log(`Found URL in '${field}' field:`, imageData[field]);
+            return imageData[field];
           }
         }
         
-        // If we have a nested "data" object, check that too
-        if (imageData.data && typeof imageData.data === 'object') {
-          console.log("Checking nested data object for URLs");
-          for (const key of Object.keys(imageData.data)) {
-            const value = imageData.data[key];
-            if (typeof value === 'string' && value.startsWith('http')) {
-              console.log(`Found URL in data.${key} field:`, value);
-              return value;
+        // Check for string URL in nested objects like data, result, response
+        const nestedFields = ['data', 'result', 'response', 'output', 'content'];
+        for (const nestedField of nestedFields) {
+          if (imageData[nestedField] && typeof imageData[nestedField] === 'object') {
+            for (const urlField of possibleURLFields) {
+              if (typeof imageData[nestedField][urlField] === 'string' && 
+                  imageData[nestedField][urlField].startsWith('http')) {
+                console.log(`Found URL in ${nestedField}.${urlField}:`, imageData[nestedField][urlField]);
+                return imageData[nestedField][urlField];
+              }
             }
           }
         }
         
-        // Last resort: if the entire response is a simple string URL
+        // If the entire response is a string that looks like a URL
         if (typeof imageData === 'string' && imageData.startsWith('http')) {
           console.log("Response is a direct URL string:", imageData);
           return imageData;
         }
         
-        console.error("No URL found in the response:", imageData);
+        // Last resort - stringify the whole object for debugging
+        console.warn("Couldn't find URL in response. Full response:", JSON.stringify(imageData));
       }
       
       // For development, return a placeholder image

@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download } from "lucide-react";
+import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -238,7 +238,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   // Function to handle image view
   const handleViewImage = () => {
     if (!imageUrl) {
-      toast.error(`No ${title} image available yet`);
+      toast.error(`No ${title} image URL available yet`);
       return;
     }
     
@@ -247,7 +247,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     // Open the webView link in a new tab
     window.open(imageUrl, '_blank');
     
-    toast.success(`${title} image opened in new tab!`);
+    toast.success(`${title} image URL opened in new tab!`);
   };
 
   const renderIcon = () => {
@@ -333,7 +333,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center gap-1 text-sm font-medium text-gray-600">
                 <Image size={16} />
-                <span>Section Image</span>
+                <span>Section Image URL</span>
               </div>
               <div className="flex items-center gap-2">
                 {/* Generate Image Button - only show when content is available and not already generating */}
@@ -365,9 +365,9 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                   size="sm"
                   disabled={!imageUrl || isWebhookProcessing}
                   className={`h-8 px-2 flex items-center gap-1 text-xs ${imageUrl ? 'text-blue-600 hover:text-blue-800' : ''}`}
-                  title="View image"
+                  title="Open image URL in new tab"
                 >
-                  <Download size={16} />
+                  <ExternalLink size={16} />
                   <span>View</span>
                 </Button>
               </div>
@@ -376,7 +376,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
             >
               {imageUrl ? (
-                <div className="flex flex-col items-center justify-center w-full h-full relative group">
+                <div className="flex flex-col items-center justify-center w-full h-full relative group p-3">
                   <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors"></div>
                   <a 
                     href={imageUrl} 
@@ -384,15 +384,22 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                     rel="noopener noreferrer"
                     className="text-blue-500 hover:underline flex flex-col items-center z-10"
                   >
-                    <Image size={32} strokeWidth={1.5} className="mb-2 text-blue-600" />
-                    <span className="text-sm break-all px-4 text-center">Image available - Click to view</span>
-                    <span className="text-xs text-blue-700 mt-1 max-w-[90%] truncate">{imageUrl}</span>
+                    <ExternalLink size={24} strokeWidth={1.5} className="mb-2 text-blue-600" />
+                    <span className="text-sm break-all px-4 text-center">Image URL available</span>
+                    <div className="mt-2 max-w-full overflow-hidden">
+                      <span className="text-xs text-blue-700 block px-2 text-center truncate max-w-[280px]">
+                        {imageUrl}
+                      </span>
+                      <span className="text-xs text-blue-600 block mt-1 text-center">
+                        Click to open
+                      </span>
+                    </div>
                   </a>
                 </div>
               ) : isGeneratingImage ? (
                 <div className="text-gray-400 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
-                  <span className="text-xs mt-1">Generating image...</span>
+                  <span className="text-xs mt-1">Generating image URL...</span>
                 </div>
               ) : isWebhookProcessing ? (
                 <div className="text-gray-400 flex flex-col items-center">
@@ -402,9 +409,9 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               ) : (
                 <div className="text-gray-400 flex flex-col items-center">
                   <Image size={24} strokeWidth={1.5} />
-                  <span className="text-xs mt-1">No image available</span>
+                  <span className="text-xs mt-1">No image URL available</span>
                   {hasContent && onGenerateImage && (
-                    <span className="text-xs mt-1">Click "Generate" to create an image</span>
+                    <span className="text-xs mt-1">Click "Generate" to create an image URL</span>
                   )}
                 </div>
               )}
@@ -469,10 +476,13 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                     className="inline-block"
                   >
                     <Button className="bg-white/80 hover:bg-white text-gray-800 shadow-md">
-                      <Image size={16} className="mr-2" />
-                      View Generated Image
+                      <ExternalLink size={16} className="mr-2" />
+                      Open Image URL
                     </Button>
                   </a>
+                  <div className="mt-2 text-sm text-gray-600 break-all">
+                    {imageUrl}
+                  </div>
                 </div>
               )}
               <div 

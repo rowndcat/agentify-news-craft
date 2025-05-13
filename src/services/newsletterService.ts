@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Define types
@@ -33,215 +32,56 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
     const data = await response.json();
     console.log("Newsletter webhook response:", data);
     
-    // Extract the relevant content from the webhook response
+    // Initialize result object for storing the parsed sections
     let result: { news?: string; markets?: string; copilot?: string; newsImage?: string; marketsImage?: string; copilotImage?: string } = {};
     
     if (data && data.output) {
       console.log("Raw webhook output:", data.output);
       
+      // Try to separate content into sections using multiple approaches
       if (typeof data.output === "string") {
-        try {
-          // Try to parse the output as JSON
-          const parsedOutput = JSON.parse(data.output);
-          console.log("Parsed webhook output:", parsedOutput);
+        // Check if we have "News Section" style content with multiple sections in one string
+        if (data.output.includes("News Section") && 
+            (data.output.includes("Economy & Markets Section") || 
+             data.output.includes("Markets") ||
+             data.output.includes("Copilot"))) {
           
-          // Look for section content in common formats
-          // First check - direct properties for sections
-          result.news = parsedOutput.news || parsedOutput["AI News piece"] || parsedOutput.newsSection || "";
-          result.markets = parsedOutput.markets || parsedOutput.economy || parsedOutput.marketsSection || parsedOutput["Economy & Markets Section"] || "";
-          result.copilot = parsedOutput.copilot || parsedOutput.copilotSection || parsedOutput["AI Copilot"] || parsedOutput["Copilot Section"] || "";
+          console.log("Detected multiple sections in a single string response - separating sections");
+          const sections = splitContentIntoSections(data.output);
           
-          // Second check - try common content fields if sections are still empty
-          if (!result.news && parsedOutput.content) {
-            if (typeof parsedOutput.content === 'object' && parsedOutput.content.news) {
-              result.news = parsedOutput.content.news;
-            } else if (typeof parsedOutput.content === 'string' && 
-                      (parsedOutput.content.includes("News Section") || 
-                       parsedOutput.content.includes("AI News piece"))) {
-              result.news = parsedOutput.content;
-            }
-          }
+          result.news = sections.news || "";
+          result.markets = sections.markets || "";
+          result.copilot = sections.copilot || "";
           
-          if (!result.markets && parsedOutput.content) {
-            if (typeof parsedOutput.content === 'object' && parsedOutput.content.markets) {
-              result.markets = parsedOutput.content.markets;
-            } else if (typeof parsedOutput.content === 'string' && 
-                      (parsedOutput.content.includes("Economy & Markets") || 
-                       parsedOutput.content.includes("Markets Section"))) {
-              result.markets = parsedOutput.content;
-            }
-          }
-          
-          if (!result.copilot && parsedOutput.content) {
-            if (typeof parsedOutput.content === 'object' && parsedOutput.content.copilot) {
-              result.copilot = parsedOutput.content.copilot;
-            } else if (typeof parsedOutput.content === 'string' && 
-                      (parsedOutput.content.includes("Copilot") || 
-                       parsedOutput.content.includes("AI Copilot"))) {
-              result.copilot = parsedOutput.content;
-            }
-          }
-          
-          // If the output contains sections array, process it
-          if (parsedOutput.sections && Array.isArray(parsedOutput.sections)) {
-            console.log("Processing sections array:", parsedOutput.sections);
-            parsedOutput.sections.forEach((section: any) => {
-              if (section.type === "news" || section.title?.toLowerCase().includes("news")) {
-                result.news = section.content || section.text || "";
-              }
-              if (section.type === "markets" || section.title?.toLowerCase().includes("market") || 
-                  section.title?.toLowerCase().includes("economy")) {
-                result.markets = section.content || section.text || "";
-              }
-              if (section.type === "copilot" || section.title?.toLowerCase().includes("copilot") || 
-                  section.title?.toLowerCase().includes("ai assistant")) {
-                result.copilot = section.content || section.text || "";
-              }
-            });
-          }
-          
-          // Look for image URLs with multiple possible property names
-          result.newsImage = parsedOutput.newsImage || parsedOutput.news_image || parsedOutput.webViewLink || 
-                            (parsedOutput.images && parsedOutput.images.news) || null;
-          result.marketsImage = parsedOutput.marketsImage || parsedOutput.markets_image || 
-                               (parsedOutput.images && parsedOutput.images.markets) || null;
-          result.copilotImage = parsedOutput.copilotImage || parsedOutput.copilot_image || 
-                               (parsedOutput.images && parsedOutput.images.copilot) || null;
-          
-          console.log("Extracted section content:", {
-            news: result.news ? result.news.substring(0, 50) + "..." : "None",
-            markets: result.markets ? result.markets.substring(0, 50) + "..." : "None",
-            copilot: result.copilot ? result.copilot.substring(0, 50) + "..." : "None"
-          });
-          
-          console.log("Extracted image URLs:", {
-            newsImage: result.newsImage,
-            marketsImage: result.marketsImage,
-            copilotImage: result.copilotImage
-          });
-        } catch (error) {
-          console.error("Failed to parse webhook output as JSON:", error);
-          
-          // If parsing fails, check if the string itself contains identifiable section headers
-          const outputStr = data.output;
-          
-          // Simple string-based parsing if JSON parsing failed
-          if (outputStr.includes("News Section") || outputStr.includes("AI News piece")) {
-            console.log("Using string-based section detection for news");
-            result.news = outputStr;
-          } else if (outputStr.includes("Economy & Markets") || outputStr.includes("Market")) {
-            console.log("Using string-based section detection for markets");
-            result.markets = outputStr;
-          } else if (outputStr.includes("Copilot") || outputStr.includes("AI Assistant")) {
-            console.log("Using string-based section detection for copilot");
-            result.copilot = outputStr;
-          } else {
-            // If no section identifiers found, default to news content
-            console.log("No section identifiers found in string, defaulting to news");
-            result.news = outputStr;
+          console.log("Successfully separated sections from combined string");
+        } else {
+          try {
+            // Try to parse as JSON if not already detected as multi-section text
+            const parsedOutput = JSON.parse(data.output);
+            console.log("Parsed webhook output:", parsedOutput);
+            extractSectionsFromObject(parsedOutput, result);
+          } catch (error) {
+            console.error("Failed to parse webhook output as JSON:", error);
+            
+            // If parsing fails, check if the string itself can be a single section
+            const outputStr = data.output;
+            identifySingleSectionContent(outputStr, result);
           }
         }
       } else if (typeof data.output === "object") {
         // Output is already an object
         console.log("Webhook output is already an object");
-        
-        // Direct section properties
-        result.news = data.output.news || data.output["AI News piece"] || data.output.newsSection || "";
-        result.markets = data.output.markets || data.output.economy || data.output["Economy & Markets Section"] || data.output.marketsSection || "";
-        result.copilot = data.output.copilot || data.output["AI Copilot"] || data.output.copilotSection || data.output["Copilot Section"] || "";
-        
-        // Check if sections array exists
-        if (data.output.sections && Array.isArray(data.output.sections)) {
-          console.log("Processing sections array from data.output:", data.output.sections);
-          data.output.sections.forEach((section: any) => {
-            if (section.type === "news" || section.title?.toLowerCase().includes("news")) {
-              result.news = section.content || section.text || "";
-            }
-            if (section.type === "markets" || section.title?.toLowerCase().includes("market") || 
-                section.title?.toLowerCase().includes("economy")) {
-              result.markets = section.content || section.text || "";
-            }
-            if (section.type === "copilot" || section.title?.toLowerCase().includes("copilot") || 
-                section.title?.toLowerCase().includes("ai assistant")) {
-              result.copilot = section.content || section.text || "";
-            }
-          });
-        }
-        
-        // Check content object if sections are still empty
-        if (!result.news && !result.markets && !result.copilot && data.output.content) {
-          console.log("Checking content object:", data.output.content);
-          
-          if (typeof data.output.content === 'object') {
-            result.news = data.output.content.news || "";
-            result.markets = data.output.content.markets || data.output.content.economy || "";
-            result.copilot = data.output.content.copilot || "";
-          } else if (typeof data.output.content === 'string') {
-            // If content is a string, try to determine which section it belongs to based on keywords
-            const contentStr = data.output.content;
-            
-            if (contentStr.includes("News Section") || contentStr.includes("AI News piece")) {
-              console.log("Content string appears to be news section");
-              result.news = contentStr;
-            } else if (contentStr.includes("Economy & Markets") || contentStr.includes("Market")) {
-              console.log("Content string appears to be markets section");
-              result.markets = contentStr;
-            } else if (contentStr.includes("Copilot") || contentStr.includes("AI Assistant")) {
-              console.log("Content string appears to be copilot section");
-              result.copilot = contentStr;
-            } else {
-              // If no section identifiers, try to split the content by section headers
-              console.log("Attempting to split content by section headers");
-              const parts = splitContentBySectionHeaders(contentStr);
-              result.news = parts.news || "";
-              result.markets = parts.markets || "";
-              result.copilot = parts.copilot || "";
-            }
-          }
-        }
-        
-        // Extract image URLs with various possible property names
-        result.newsImage = data.output.newsImage || data.output.news_image || 
-                         (data.output.images && data.output.images.news) || 
-                         data.output.webViewLink || null;
-        result.marketsImage = data.output.marketsImage || data.output.markets_image || 
-                            (data.output.images && data.output.images.markets) || null;
-        result.copilotImage = data.output.copilotImage || data.output.copilot_image || 
-                            (data.output.images && data.output.images.copilot) || null;
-        
-        console.log("Extracted section content from object:", {
-          news: result.news ? result.news.substring(0, 50) + "..." : "None",
-          markets: result.markets ? result.markets.substring(0, 50) + "..." : "None",
-          copilot: result.copilot ? result.copilot.substring(0, 50) + "..." : "None"
-        });
-        
-        console.log("Extracted image URLs from object:", {
-          newsImage: result.newsImage,
-          marketsImage: result.marketsImage,
-          copilotImage: result.copilotImage
-        });
+        extractSectionsFromObject(data.output, result);
       }
     }
     
-    // If we still don't have section content, try one more approach with the raw data
+    // If we've exhausted all options and still don't have content, try direct data
     if (!result.news && !result.markets && !result.copilot && data) {
       console.log("Attempting direct data extraction as fallback");
-      
-      // Try direct properties on data
-      result.news = data.news || data["AI News piece"] || data.newsSection || "";
-      result.markets = data.markets || data.economy || data["Economy & Markets Section"] || data.marketsSection || "";
-      result.copilot = data.copilot || data["AI Copilot"] || data.copilotSection || data["Copilot Section"] || "";
-      
-      // Try to extract image URLs
-      result.newsImage = data.newsImage || data.news_image || data.webViewLink || 
-                      (data.images && data.images.news) || null;
-      result.marketsImage = data.marketsImage || data.markets_image || 
-                         (data.images && data.images.markets) || null;
-      result.copilotImage = data.copilotImage || data.copilot_image || 
-                         (data.images && data.images.copilot) || null;
+      extractSectionsFromObject(data, result);
     }
     
-    // If we've exhausted all options and still don't have content, log an error
+    // If we've tried everything and still don't have content, log an error
     if (!result.news && !result.markets && !result.copilot) {
       console.error("Could not extract any section content from webhook response", data);
       toast.error("Could not extract content from webhook response. Please check the console for details.");
@@ -254,100 +94,237 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
   }
 };
 
-// Helper function to try to split content by section headers
-function splitContentBySectionHeaders(content: string): { news: string; markets: string; copilot: string } {
+// Helper function to split a single text with multiple sections into separate sections
+function splitContentIntoSections(content: string): { news: string; markets: string; copilot: string } {
+  console.log("Splitting combined content into sections");
   const result = { news: "", markets: "", copilot: "" };
   
-  // Define patterns to look for
-  const newsPatterns = [
-    /News Section/i, 
-    /AI News/i, 
-    /\*\*News/i, 
-    /### News/i
+  // Define section identifiers and their boundaries
+  const sections = [
+    {
+      name: "news",
+      startPatterns: [
+        /News Section/i,
+        /\*\*News Section\*\*/i,
+        /### News Section/i,
+        /## News Section/i
+      ],
+      endPatterns: [
+        /Economy & Markets Section/i,
+        /\*\*Economy & Markets Section\*\*/i,
+        /### Economy & Markets/i,
+        /## Economy & Markets/i,
+        /Markets Section/i,
+        /\*\*Markets Section\*\*/i,
+        /### Markets Section/i,
+        /## Markets Section/i,
+        /Copilot Section/i,
+        /\*\*Copilot Section\*\*/i,
+        /\*\*Copilot\*\*/i,
+        /### Copilot/i,
+        /## Copilot/i,
+        /\*\*AI Copilot\*\*/i
+      ]
+    },
+    {
+      name: "markets",
+      startPatterns: [
+        /Economy & Markets Section/i,
+        /\*\*Economy & Markets Section\*\*/i,
+        /### Economy & Markets/i,
+        /## Economy & Markets/i,
+        /Markets Section/i,
+        /\*\*Markets Section\*\*/i,
+        /### Markets Section/i,
+        /## Markets Section/i
+      ],
+      endPatterns: [
+        /Copilot Section/i,
+        /\*\*Copilot Section\*\*/i,
+        /\*\*Copilot\*\*/i,
+        /### Copilot/i,
+        /## Copilot/i,
+        /\*\*AI Copilot\*\*/i
+      ]
+    },
+    {
+      name: "copilot",
+      startPatterns: [
+        /Copilot Section/i,
+        /\*\*Copilot Section\*\*/i,
+        /\*\*Copilot\*\*/i,
+        /### Copilot/i,
+        /## Copilot/i,
+        /\*\*AI Copilot\*\*/i
+      ],
+      endPatterns: []  // No end pattern as copilot is typically the last section
+    }
   ];
-  
-  const marketsPatterns = [
-    /Economy & Markets/i, 
-    /Markets Section/i, 
-    /\*\*Markets/i, 
-    /### Markets/i,
-    /### Economy/i
-  ];
-  
-  const copilotPatterns = [
-    /Copilot/i, 
-    /AI Assistant/i, 
-    /\*\*Copilot/i, 
-    /### Copilot/i
-  ];
-  
-  // Find positions of section headers
-  let newsPos = findFirstMatch(content, newsPatterns);
-  let marketsPos = findFirstMatch(content, marketsPatterns);
-  let copilotPos = findFirstMatch(content, copilotPatterns);
-  
-  // Sort positions to determine content ranges
-  const positions = [
-    { type: 'news', pos: newsPos },
-    { type: 'markets', pos: marketsPos },
-    { type: 'copilot', pos: copilotPos }
-  ].filter(item => item.pos !== -1)
-   .sort((a, b) => a.pos - b.pos);
-  
-  // Extract sections based on their positions
-  for (let i = 0; i < positions.length; i++) {
-    const current = positions[i];
-    const next = positions[i + 1];
-    const sectionContent = next 
-      ? content.substring(current.pos, next.pos)
-      : content.substring(current.pos);
+
+  // Function to find the first matching pattern in text
+  function findFirstMatch(text: string, patterns: RegExp[]): number {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match.index !== undefined) {
+        return match.index;
+      }
+    }
+    return -1;
+  }
+
+  // For each section, try to extract content between its start and end patterns
+  for (const section of sections) {
+    const startIdx = findFirstMatch(content, section.startPatterns);
     
-    if (current.type === 'news') result.news = sectionContent.trim();
-    if (current.type === 'markets') result.markets = sectionContent.trim();
-    if (current.type === 'copilot') result.copilot = sectionContent.trim();
+    if (startIdx !== -1) {
+      let endIdx = content.length;
+      
+      // If there are end patterns, find the first one that appears after startIdx
+      if (section.endPatterns.length > 0) {
+        for (const endPattern of section.endPatterns) {
+          const match = content.substring(startIdx).match(endPattern);
+          if (match && match.index !== undefined) {
+            const possibleEndIdx = startIdx + match.index;
+            if (possibleEndIdx > startIdx && possibleEndIdx < endIdx) {
+              endIdx = possibleEndIdx;
+            }
+          }
+        }
+      }
+      
+      // Extract the section content
+      const sectionContent = content.substring(startIdx, endIdx).trim();
+      result[section.name as keyof typeof result] = sectionContent;
+      
+      console.log(`Extracted ${section.name} section, length: ${sectionContent.length} characters`);
+    }
   }
   
-  // If we found positions but no content was extracted, handle edge case
-  if (positions.length > 0 && !result.news && !result.markets && !result.copilot) {
-    // Fallback: if we have at least one position, put everything after that position
-    // into the corresponding section
-    const firstPos = positions[0];
-    if (firstPos.type === 'news') result.news = content.substring(firstPos.pos).trim();
-    if (firstPos.type === 'markets') result.markets = content.substring(firstPos.pos).trim();
-    if (firstPos.type === 'copilot') result.copilot = content.substring(firstPos.pos).trim();
-  }
-  
-  // If still no content found, make a best guess based on keywords
+  // Safety check for empty sections
   if (!result.news && !result.markets && !result.copilot) {
-    if (content.toLowerCase().includes('news') || content.toLowerCase().includes('article')) {
-      result.news = content;
-    } else if (content.toLowerCase().includes('market') || content.toLowerCase().includes('economy')) {
-      result.markets = content;
-    } else if (content.toLowerCase().includes('copilot') || content.toLowerCase().includes('assistant')) {
-      result.copilot = content;
-    } else {
-      // If all else fails, put content in news section
-      result.news = content;
+    console.warn("Failed to extract any sections using pattern matching");
+    
+    // Last resort: try to split by certain emoji patterns often used in markets sections
+    if (content.includes("🌍 Big Picture") && content.includes("📈 What to Watch")) {
+      const newsEndIndex = content.indexOf("🌍 Big Picture");
+      if (newsEndIndex > 0) {
+        result.news = content.substring(0, newsEndIndex).trim();
+        
+        const copilotStartIndex = content.indexOf("Copilot Section");
+        if (copilotStartIndex > newsEndIndex) {
+          result.markets = content.substring(newsEndIndex, copilotStartIndex).trim();
+          result.copilot = content.substring(copilotStartIndex).trim();
+        } else {
+          result.markets = content.substring(newsEndIndex).trim();
+        }
+        
+        console.log("Split content based on emoji patterns");
+      }
     }
   }
   
   return result;
 }
 
-// Helper function to find the first occurrence of any pattern in a string
-function findFirstMatch(str: string, patterns: RegExp[]): number {
-  let firstPos = -1;
+// Helper function to extract sections from an object data structure
+function extractSectionsFromObject(data: any, result: any): void {
+  if (!data) return;
   
-  for (const pattern of patterns) {
-    const match = str.match(pattern);
-    if (match && match.index !== undefined) {
-      if (firstPos === -1 || match.index < firstPos) {
-        firstPos = match.index;
+  // Direct section properties with various possible names
+  result.news = result.news || data.news || data["AI News piece"] || data.newsSection || "";
+  result.markets = result.markets || data.markets || data.economy || data["Economy & Markets Section"] || data.marketsSection || "";
+  result.copilot = result.copilot || data.copilot || data["AI Copilot"] || data.copilotSection || data["Copilot Section"] || "";
+  
+  // Check if sections array exists
+  if (data.sections && Array.isArray(data.sections)) {
+    console.log("Processing sections array:", data.sections);
+    data.sections.forEach((section: any) => {
+      if (section.type === "news" || (section.title && section.title.toLowerCase().includes("news"))) {
+        result.news = section.content || section.text || "";
+      }
+      if (section.type === "markets" || 
+          (section.title && (section.title.toLowerCase().includes("market") || section.title.toLowerCase().includes("economy")))) {
+        result.markets = section.content || section.text || "";
+      }
+      if (section.type === "copilot" || 
+          (section.title && (section.title.toLowerCase().includes("copilot") || section.title.toLowerCase().includes("ai assistant")))) {
+        result.copilot = section.content || section.text || "";
+      }
+    });
+  }
+  
+  // Check content object if sections are still empty
+  if ((!result.news || !result.markets || !result.copilot) && data.content) {
+    console.log("Checking content object:", data.content);
+    
+    if (typeof data.content === 'object') {
+      result.news = result.news || data.content.news || "";
+      result.markets = result.markets || data.content.markets || data.content.economy || "";
+      result.copilot = result.copilot || data.content.copilot || "";
+    } else if (typeof data.content === 'string') {
+      // If content is a string and we have no sections yet, try to split it
+      if (!result.news && !result.markets && !result.copilot) {
+        const sections = splitContentIntoSections(data.content);
+        result.news = result.news || sections.news;
+        result.markets = result.markets || sections.markets;
+        result.copilot = result.copilot || sections.copilot;
       }
     }
   }
   
-  return firstPos;
+  // Extract image URLs with various possible property names
+  result.newsImage = result.newsImage || data.newsImage || data.news_image || 
+                    (data.images && data.images.news) || data.webViewLink || null;
+  result.marketsImage = result.marketsImage || data.marketsImage || data.markets_image || 
+                      (data.images && data.images.markets) || null;
+  result.copilotImage = result.copilotImage || data.copilotImage || data.copilot_image || 
+                      (data.images && data.images.copilot) || null;
+}
+
+// Helper function to identify which section a single content string belongs to
+function identifySingleSectionContent(content: string, result: any): void {
+  if (!content) return;
+  
+  // News-related keywords
+  if (content.toLowerCase().includes("news section") || 
+      content.toLowerCase().includes("ai news piece") ||
+      content.toLowerCase().includes("additional news links") ||
+      content.includes("Why this matters:")) {
+    result.news = content;
+    console.log("Identified content as news section based on keywords");
+  } 
+  // Markets-related keywords
+  else if (content.toLowerCase().includes("economy & markets") || 
+           content.toLowerCase().includes("markets section") ||
+           content.includes("🌍 Big Picture") ||
+           content.includes("📈 What to Watch") ||
+           content.includes("🔑 Key Takeaway")) {
+    result.markets = content;
+    console.log("Identified content as markets section based on keywords");
+  } 
+  // Copilot-related keywords
+  else if (content.toLowerCase().includes("copilot section") || 
+           content.toLowerCase().includes("ai copilot") ||
+           content.toLowerCase().includes("time: automate") ||
+           content.toLowerCase().includes("attention: generate") ||
+           content.toLowerCase().includes("profit/progress:")) {
+    result.copilot = content;
+    console.log("Identified content as copilot section based on keywords");
+  }
+  // If no clear identification, try to split by sections if it appears to contain multiple sections
+  else if (content.includes("News Section") && 
+          (content.includes("Economy & Markets") || content.includes("Copilot"))) {
+    const sections = splitContentIntoSections(content);
+    result.news = sections.news || "";
+    result.markets = sections.markets || "";
+    result.copilot = sections.copilot || "";
+    console.log("Split unidentified content into sections");
+  }
+  // If still can't identify, put in news as default
+  else {
+    result.news = content;
+    console.log("Could not identify section type, defaulting to news");
+  }
 }
 
 // Function to regenerate a specific section

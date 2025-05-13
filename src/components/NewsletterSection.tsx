@@ -41,18 +41,20 @@ const formatMarkdown = (text: string): string => {
   
   // Pre-processing for special cases
   let formattedText = text;
-  
+
   // Process News Section
   if (formattedText.includes("**News Section**") || 
       formattedText.includes("### **News Section**") ||
-      formattedText.includes("**Title:")) {
+      formattedText.includes("**Title:") ||
+      formattedText.includes("*AI News piece*:")) {
     
     // Make section header stand out
     formattedText = formattedText
       .replace(/\*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>')
-      .replace(/### \*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>');
+      .replace(/### \*\*News Section\*\*/g, '<h2 class="text-xl font-semibold mb-3 mt-2 text-brand-blue">News Section</h2>')
+      .replace(/\*AI News piece\*:/g, '<strong class="block mb-2 text-brand-blue">AI News piece:</strong>');
       
-    // Format title
+    // Format title and TL;DR
     formattedText = formattedText
       .replace(/\*\*Title:(.*?)\*\*/g, '<h3 class="text-lg font-medium mb-2">$1</h3>')
       .replace(/TL;DR:/g, '<strong>TL;DR:</strong>');
@@ -66,7 +68,8 @@ const formatMarkdown = (text: string): string => {
     // Format additional links section
     formattedText = formattedText
       .replace(/\*\*7 Additional News Links\*\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
-      .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>');
+      .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>')
+      .replace(/\*7 additional article links\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">Additional Article Links:</h4>');
   }
   
   // For Markets section with emoji headers
@@ -138,8 +141,8 @@ const formatMarkdown = (text: string): string => {
     // Italic
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     // Bullet lists - handle multiple formats
-    .replace(/^- (.*?)$/gm, '<li>$1</li>')
     .replace(/^\- (.*?)$/gm, '<li>$1</li>')
+    .replace(/^- (.*?)$/gm, '<li>$1</li>')
     .replace(/^\• (.*?)$/gm, '<li>$1</li>')
     // Numbered lists
     .replace(/^\d+\. (.*?)$/gm, '<li>$1</li>')
@@ -232,7 +235,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     setInstructions("");
   };
 
-  // Function to handle image download
+  // Function to handle image view
   const handleViewImage = () => {
     if (!imageUrl) return;
     
@@ -384,7 +387,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               ) : isWebhookProcessing ? (
                 <div className="text-gray-400 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
-                  <span className="text-xs mt-1">Processing image...</span>
+                  <span className="text-xs mt-1">Processing...</span>
                 </div>
               ) : (
                 <div className="text-gray-400 flex flex-col items-center">

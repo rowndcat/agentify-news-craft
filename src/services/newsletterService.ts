@@ -1,3 +1,4 @@
+
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -18,9 +19,9 @@ const WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439
 const IMAGE_WEBHOOK_URL = "https://agentify360.app.n8n.cloud/webhook/76840a22-558d-4fae-9f51-aadcd7c3fb7f";
 
 // Webhook timeout configuration
-const WEBHOOK_WAIT_TIME = 15000; // 15 seconds
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 5000; // 5 seconds
+const WEBHOOK_WAIT_TIME = 30000; // 30 seconds
+const MAX_POLLING_ATTEMPTS = 10;
+const POLLING_INTERVAL = 3000; // 3 seconds
 
 /**
  * Send a request to generate newsletter content
@@ -37,115 +38,97 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
     
     console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
-    // Send the webhook request
-    try {
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(webhookPayload)
-      });
-      
-      console.log("Webhook request sent, response status:", response.status);
-      
-      // Check if we got a direct response from the webhook
-      if (response.ok) {
-        try {
-          const webhookData = await response.json();
-          console.log("Webhook response data:", webhookData);
+    // Send the initial webhook request
+    const response = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+    
+    console.log("Webhook request sent, response status:", response.status);
+    
+    // Process direct webhook response if available
+    if (response.ok) {
+      try {
+        const webhookData = await response.json();
+        console.log("Direct webhook response received:", webhookData);
+        
+        // Check if the webhook returned content in the expected format
+        if (webhookData && webhookData.output) {
+          console.log("Found output in direct webhook response, length:", webhookData.output.length);
           
-          // Check if the webhook returned content in the expected format
-          if (webhookData && webhookData.output) {
-            console.log("Using direct webhook response content");
-            console.log("Webhook output received:", webhookData.output.substring(0, 200) + "...");
-            
-            // Parse the webhook output which is a single markdown string with sections
-            const sections = parseWebhookOutput(webhookData.output);
-            
-            // Log the parsed sections to help debugging
-            console.log("Parsed sections:", {
-              news: sections.news ? `${sections.news.substring(0, 50)}...` : "None",
-              markets: sections.markets ? `${sections.markets.substring(0, 50)}...` : "None",
-              copilot: sections.copilot ? `${sections.copilot.substring(0, 50)}...` : "None"
-            });
-            
-            // Return the parsed sections if valid
-            if (sections.news || sections.markets || sections.copilot) {
-              return sections;
-            }
-          }
-        } catch (parseError) {
-          console.error("Error parsing webhook response:", parseError);
-        }
-      }
-      
-      // Wait for the webhook to process with retry mechanism
-      console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);
-      
-      // First wait period
-      await new Promise(resolve => setTimeout(resolve, WEBHOOK_WAIT_TIME));
-      
-      // Try API connection with retries
-      for (let retryCount = 0; retryCount <= MAX_RETRIES; retryCount++) {
-        try {
-          console.log(`Making API request attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+          // Parse the webhook output which is a single markdown string with sections
+          const sections = parseWebhookOutput(webhookData.output);
           
-          // Make API request
-          const apiResponse = await fetch(`${API_URL}/generate-newsletter`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${API_KEY}`
-            },
-            body: JSON.stringify(webhookPayload),
-            // Add a reasonable timeout for the API request
-            signal: AbortSignal.timeout(10000)
-          });
-          
-          if (apiResponse.ok) {
-            const data = await apiResponse.json();
-            console.log("Raw API response:", data);
-            
-            // Return the processed sections
-            return {
-              news: data.news || data.content?.news || "",
-              markets: data.markets || data.content?.markets || "",
-              copilot: data.copilot || data.content?.copilot || "",
-              newsImage: data.newsImage || data.content?.newsImage || null,
-              marketsImage: data.marketsImage || data.content?.marketsImage || null,
-              copilotImage: data.copilotImage || data.content?.copilotImage || null,
-            };
-          } else {
-            console.log(`API attempt ${retryCount + 1} failed with status: ${apiResponse.status}`);
-            
-            // If not the last retry, wait before trying again
-            if (retryCount < MAX_RETRIES) {
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            }
-          }
-        } catch (apiError) {
-          console.error(`API attempt ${retryCount + 1} error:`, apiError);
-          
-          // If not the last retry, wait before trying again
-          if (retryCount < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          // If we have at least one section with content, return it
+          if (sections.news || sections.markets || sections.copilot) {
+            console.log("Successfully parsed sections from direct webhook response");
+            return sections;
           }
         }
+      } catch (parseError) {
+        console.error("Error parsing direct webhook response:", parseError);
       }
-      
-      console.log("All API attempts failed after webhook processing");
-    } catch (webhookError) {
-      console.error("Error processing webhook request:", webhookError);
     }
     
-    // Only use mock data if in development mode AND if the webhook/API failed
+    // If we didn't get parseable content from the direct response, start polling
+    console.log("Starting polling for webhook results...");
+    
+    // Poll for results
+    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
+      console.log(`Polling attempt ${attempt}/${MAX_POLLING_ATTEMPTS}`);
+      
+      try {
+        // Wait for the polling interval
+        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+        
+        // Make API request to check for results
+        const apiResponse = await fetch(`${API_URL}/check-webhook-result`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`
+          },
+          body: JSON.stringify({ chatId: webhookPayload.chatId }),
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (apiResponse.ok) {
+          const data = await apiResponse.json();
+          console.log(`Polling attempt ${attempt}: Response received:`, data);
+          
+          // If we have content, parse and return it
+          if (data && data.output) {
+            const sections = parseWebhookOutput(data.output);
+            
+            if (sections.news || sections.markets || sections.copilot) {
+              console.log("Successfully parsed sections from polling response");
+              return sections;
+            }
+          } else if (data && data.status === "processing") {
+            console.log("Webhook still processing, continuing to poll...");
+            continue;
+          }
+        } else {
+          console.log(`Polling attempt ${attempt} failed with status: ${apiResponse.status}`);
+        }
+      } catch (pollingError) {
+        console.error(`Polling attempt ${attempt} error:`, pollingError);
+      }
+    }
+    
+    // If we've reached this point, polling has failed to get results
+    console.warn("All polling attempts completed without receiving valid content");
+    
+    // Only use mock data if in development mode
     if (import.meta.env.DEV) {
-      console.log("Falling back to mock data after webhook attempt");
+      console.log("Using mock data after all polling attempts failed");
       return getMockData(webhookPayload);
     }
     
-    throw new Error("Failed to get response from webhook and API after multiple attempts");
+    throw new Error("Failed to get newsletter content after multiple polling attempts");
   } catch (error) {
     console.error("Error generating newsletter content:", error);
     
@@ -162,7 +145,7 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
  * Parse webhook output which comes as a single markdown string with sections
  */
 const parseWebhookOutput = (output: string): NewsletterSections => {
-  console.log("Parsing webhook output:", output.substring(0, 100) + "...");
+  console.log("Parsing webhook output, first 100 chars:", output.substring(0, 100) + "...");
   
   const sections: NewsletterSections = {
     news: "",
@@ -171,9 +154,41 @@ const parseWebhookOutput = (output: string): NewsletterSections => {
   };
   
   try {
-    // Split the output by section markers
-    const parts = output.split("---");
+    // Check if the output appears to be valid markdown content
+    if (!output || output.trim().length === 0) {
+      console.warn("Empty output received");
+      return sections;
+    }
+    
+    // Split the output by Markdown section dividers (---)
+    const parts = output.split("---").filter(part => part.trim().length > 0);
     console.log(`Split output into ${parts.length} parts`);
+    
+    // If we didn't get parts using ---, try to identify sections based on headers
+    if (parts.length <= 1) {
+      console.log("Single part received, trying to split by section headers");
+      
+      // Look for Markdown headers ### that indicate section starts
+      const headerMatches = [...output.matchAll(/#{1,3}\s+\*\*([^*]+)\*\*/g)];
+      if (headerMatches && headerMatches.length > 0) {
+        console.log(`Found ${headerMatches.length} section headers`);
+        
+        // Use the header positions to split the content
+        const sections: string[] = [];
+        headerMatches.forEach((match, i) => {
+          const startPos = match.index;
+          const endPos = i < headerMatches.length - 1 ? headerMatches[i + 1].index : output.length;
+          if (typeof startPos === 'number' && endPos) {
+            sections.push(output.substring(startPos, endPos));
+          }
+        });
+        
+        if (sections.length > 0) {
+          console.log(`Split into ${sections.length} sections using headers`);
+          parts.push(...sections);
+        }
+      }
+    }
     
     // Process each part to identify sections
     parts.forEach((part, index) => {
@@ -181,41 +196,85 @@ const parseWebhookOutput = (output: string): NewsletterSections => {
       const trimmedPart = part.trim();
       console.log(`Processing part ${index + 1}, starts with: ${trimmedPart.substring(0, 30)}...`);
       
-      // Identify sections based on headers
-      if (trimmedPart.includes("**News Section**") || 
-          trimmedPart.includes("### **News Section**")) {
+      // Identify sections based on headers or content
+      if (
+        trimmedPart.includes("**News Section**") || 
+        trimmedPart.includes("### **News Section**") ||
+        trimmedPart.toLowerCase().includes("ai news piece") ||
+        trimmedPart.includes("### News") ||
+        (trimmedPart.toLowerCase().includes("news") && 
+         trimmedPart.toLowerCase().includes("article"))
+      ) {
         console.log("Found News section");
         sections.news = trimmedPart;
-        
-        // Use a placeholder image for news
-        sections.newsImage = sections.newsImage || "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
       } 
-      else if (trimmedPart.includes("**Economy & Markets Section**") || 
-              trimmedPart.includes("### **Economy & Markets Section**")) {
+      else if (
+        trimmedPart.includes("**Economy & Markets Section**") || 
+        trimmedPart.includes("### **Economy & Markets Section**") ||
+        trimmedPart.includes("🌍 Big Picture") ||
+        trimmedPart.includes("### 🌍") ||
+        trimmedPart.includes("### Economy") ||
+        (trimmedPart.toLowerCase().includes("market") && 
+         trimmedPart.toLowerCase().includes("economy"))
+      ) {
         console.log("Found Markets section");
         sections.markets = trimmedPart;
-        
-        // Use a placeholder image for markets
-        sections.marketsImage = sections.marketsImage || "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
       } 
-      else if (trimmedPart.includes("**Copilot Section**") || 
-              trimmedPart.includes("### **Copilot Section**") ||
-              trimmedPart.includes("**AI Copilot**")) {
+      else if (
+        trimmedPart.includes("**Copilot Section**") || 
+        trimmedPart.includes("### **Copilot Section**") ||
+        trimmedPart.includes("**AI Copilot**") ||
+        trimmedPart.includes("### Copilot") ||
+        (trimmedPart.toLowerCase().includes("copilot") && 
+         trimmedPart.toLowerCase().includes("ai"))
+      ) {
         console.log("Found Copilot section");
         sections.copilot = trimmedPart;
+      }
+      // If we couldn't identify the section but it's substantial content
+      else if (trimmedPart.length > 200) {
+        console.log("Found unidentified substantial content, analyzing...");
         
-        // Use a placeholder image for copilot
-        sections.copilotImage = sections.copilotImage || "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+        // Try to guess the section type based on content
+        if (trimmedPart.toLowerCase().includes("news") && !sections.news) {
+          console.log("Guessing this is News content based on keywords");
+          sections.news = trimmedPart;
+        } 
+        else if ((trimmedPart.toLowerCase().includes("market") || 
+                trimmedPart.toLowerCase().includes("economy")) && 
+                !sections.markets) {
+          console.log("Guessing this is Markets content based on keywords");
+          sections.markets = trimmedPart;
+        }
+        else if ((trimmedPart.toLowerCase().includes("copilot") || 
+                trimmedPart.toLowerCase().includes("insights")) && 
+                !sections.copilot) {
+          console.log("Guessing this is Copilot content based on keywords");
+          sections.copilot = trimmedPart;
+        }
+        // If we still can't identify it but we're missing a section, make a best guess
+        else if (!sections.news) {
+          console.log("Assigning unidentified content to empty News section");
+          sections.news = trimmedPart;
+        }
+        else if (!sections.markets) {
+          console.log("Assigning unidentified content to empty Markets section");
+          sections.markets = trimmedPart;
+        }
+        else if (!sections.copilot) {
+          console.log("Assigning unidentified content to empty Copilot section");
+          sections.copilot = trimmedPart;
+        }
       }
     });
+    
+    // Log the extracted sections
+    console.log("Parsed news section:", sections.news ? `${sections.news.substring(0, 50)}...` : "None");
+    console.log("Parsed markets section:", sections.markets ? `${sections.markets.substring(0, 50)}...` : "None");
+    console.log("Parsed copilot section:", sections.copilot ? `${sections.copilot.substring(0, 50)}...` : "None");
   } catch (error) {
     console.error("Error parsing sections:", error);
   }
-  
-  // Log the extracted sections
-  console.log("Parsed news section:", sections.news ? sections.news.substring(0, 50) + "..." : "None");
-  console.log("Parsed markets section:", sections.markets ? sections.markets.substring(0, 50) + "..." : "None");
-  console.log("Parsed copilot section:", sections.copilot ? sections.copilot.substring(0, 50) + "..." : "None");
   
   return sections;
 };
@@ -240,92 +299,88 @@ export const regenerateSection = async (
     console.log("Sending webhook request to:", WEBHOOK_URL);
     console.log("With webhook payload:", JSON.stringify(webhookPayload));
     
-    try {
-      // Use fetch with standard mode to get response
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(webhookPayload)
-      });
-      
-      console.log("Webhook request sent, response status:", response.status);
-      
-      // Check if we got a direct response from the webhook
-      if (response.ok) {
-        try {
-          const webhookData = await response.json();
-          console.log("Webhook response data for regeneration:", webhookData);
+    // Send initial request
+    const response = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+    
+    console.log("Webhook request sent, response status:", response.status);
+    
+    // Process direct webhook response if available
+    if (response.ok) {
+      try {
+        const webhookData = await response.json();
+        console.log("Direct webhook response received for regeneration:", webhookData);
+        
+        if (webhookData && webhookData.output) {
+          console.log("Found output in direct webhook response, length:", webhookData.output.length);
           
-          // Check if the webhook returned content in the expected format
-          if (webhookData && webhookData.output) {
-            console.log("Using direct webhook response content for regeneration");
+          // Parse the webhook output for the specific section
+          const sections = parseWebhookOutput(webhookData.output);
+          
+          // Return the specific regenerated section if available
+          if (sections[section]) {
+            console.log(`Successfully parsed ${section} section from direct webhook response`);
+            return sections[section];
+          }
+        }
+      } catch (parseError) {
+        console.error("Error parsing direct webhook regeneration response:", parseError);
+      }
+    }
+    
+    // If we didn't get parseable content from the direct response, start polling
+    console.log("Starting polling for regeneration results...");
+    
+    // Poll for results
+    for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt++) {
+      console.log(`Polling attempt ${attempt}/${MAX_POLLING_ATTEMPTS}`);
+      
+      try {
+        // Wait for the polling interval
+        await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL));
+        
+        // Make API request to check for results
+        const apiResponse = await fetch(`${API_URL}/check-webhook-result`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`
+          },
+          body: JSON.stringify({ chatId: webhookPayload.chatId }),
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (apiResponse.ok) {
+          const data = await apiResponse.json();
+          console.log(`Polling attempt ${attempt}: Response received:`, data);
+          
+          if (data && data.output) {
+            const sections = parseWebhookOutput(data.output);
             
-            // Parse the webhook output for the specific section
-            const sections = parseWebhookOutput(webhookData.output);
-            
-            // Return the specific regenerated section if available
             if (sections[section]) {
+              console.log(`Successfully parsed ${section} section from polling response`);
               return sections[section];
             }
           }
-        } catch (parseError) {
-          console.error("Error parsing webhook regeneration response:", parseError);
+        } else {
+          console.log(`Polling attempt ${attempt} failed with status: ${apiResponse.status}`);
         }
+      } catch (pollingError) {
+        console.error(`Polling attempt ${attempt} error:`, pollingError);
       }
-      
-      // Wait longer for the webhook to process
-      console.log(`Waiting for webhook to process (up to ${WEBHOOK_WAIT_TIME/1000} seconds)...`);
-      await new Promise(resolve => setTimeout(resolve, WEBHOOK_WAIT_TIME));
-      
-      // Try API connection with retries
-      for (let retryCount = 0; retryCount <= MAX_RETRIES; retryCount++) {
-        try {
-          console.log(`Making section API request attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
-          
-          // Try to get a response from the API
-          const apiResponse = await fetch(`${API_URL}/regenerate-section`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${API_KEY}`
-            },
-            body: JSON.stringify(webhookPayload),
-            signal: AbortSignal.timeout(10000)
-          });
-          
-          if (apiResponse.ok) {
-            const data = await apiResponse.json();
-            if (data && data[section]) {
-              return data[section];
-            } else {
-              console.log(`API returned success but no data for section ${section}`);
-            }
-          } else {
-            console.log(`API attempt ${retryCount + 1} failed with status: ${apiResponse.status}`);
-          }
-          
-          // If not the last retry, wait before trying again
-          if (retryCount < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          }
-        } catch (apiError) {
-          console.error(`API attempt ${retryCount + 1} error:`, apiError);
-          
-          // If not the last retry, wait before trying again
-          if (retryCount < MAX_RETRIES) {
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          }
-        }
-      }
-    } catch (webhookError) {
-      console.error("Error processing webhook request:", webhookError);
     }
     
-    // Only use mock data if in development mode AND if the webhook/API failed
+    // If we've reached this point, polling has failed to get results
+    console.warn("All polling attempts completed without receiving valid section content");
+    
+    // Only use mock data if in development mode
     if (import.meta.env.DEV) {
-      console.log("Falling back to mock data after webhook attempt for section regeneration");
+      console.log("Using mock data after all polling attempts failed");
       const mockData = getMockData({
         chatId: chatId,
         message: `Regenerate ${section} section${instructions ? ` with instructions: ${instructions}` : ''}`
@@ -333,7 +388,7 @@ export const regenerateSection = async (
       return mockData[section];
     }
     
-    throw new Error(`Failed to regenerate ${section} via webhook and API after multiple attempts`);
+    throw new Error(`Failed to get ${section} section content after multiple polling attempts`);
   } catch (error) {
     console.error(`Error regenerating ${section}:`, error);
     
@@ -364,7 +419,7 @@ export const generateSectionImage = async (
     // Prepare payload for image generation
     const payload = {
       section: section,
-      content: content.substring(0, 4000) // Limit content length to avoid very large payloads
+      content: content.substring(0, 5000) // Limit content length
     };
     
     console.log("Sending image generation webhook request to:", IMAGE_WEBHOOK_URL);
@@ -391,6 +446,25 @@ export const generateSectionImage = async (
         return imageData.webViewLink;
       } else {
         console.error("No webViewLink in the response");
+        
+        // If we have any URL in the response, try to use it
+        if (imageData && typeof imageData === 'object') {
+          const possibleUrlFields = ['url', 'imageUrl', 'link', 'image', 'src'];
+          for (const field of possibleUrlFields) {
+            if (imageData[field] && typeof imageData[field] === 'string' && 
+                imageData[field].startsWith('http')) {
+              console.log(`Found alternative URL in '${field}' field:`, imageData[field]);
+              return imageData[field];
+            }
+          }
+        }
+        
+        // For development, return a placeholder image
+        if (import.meta.env.DEV) {
+          console.log("DEV mode: Using placeholder image");
+          return getPlaceholderImage(section);
+        }
+        
         return null;
       }
     } else {

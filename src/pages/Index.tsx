@@ -73,7 +73,7 @@ const Index = () => {
       // Create the proper payload structure with chatId and message
       const payload = {
         chatId: chatId,
-        message: "Generate newsletter"
+        message: "Generate newsletter with news, markets, and copilot sections"
       };
       
       console.log("Generate all request payload:", payload);
@@ -100,24 +100,35 @@ const Index = () => {
       
       if (result) {
         // Force state update with the received sections, with fallbacks to prevent empty updates
-        setContent({
-          news: result.news || "",
-          markets: result.markets || "",
-          copilot: result.copilot || "",
-        });
+        setContent(prev => ({
+          news: result.news || prev.news,
+          markets: result.markets || prev.markets,
+          copilot: result.copilot || prev.copilot,
+        }));
         
         // Update image URLs
-        setImageUrls({
-          news: result.newsImage || null,
-          markets: result.marketsImage || null,
-          copilot: result.copilotImage || null,
-        });
+        setImageUrls(prev => ({
+          news: result.newsImage || prev.news,
+          markets: result.marketsImage || prev.markets,
+          copilot: result.copilotImage || prev.copilot,
+        }));
         
         // Check if any content was actually returned
         if (result.news || result.markets || result.copilot) {
-          toast.success("Newsletter generated successfully!");
+          let sections = [];
+          if (result.news) sections.push("News");
+          if (result.markets) sections.push("Markets");
+          if (result.copilot) sections.push("Copilot");
+          
+          if (sections.length === 3) {
+            toast.success("All newsletter sections generated successfully!");
+          } else if (sections.length > 0) {
+            toast.success(`Generated: ${sections.join(", ")}. Some sections may need regeneration.`);
+          } else {
+            toast.warning("No content was returned. Please try again.");
+          }
         } else {
-          toast.warning("No content was returned. Please try again.");
+          toast.warning("No content was returned. Please try regenerating each section individually.");
         }
       } else {
         toast.error("Failed to get response from API. Please try again.");
@@ -177,22 +188,6 @@ const Index = () => {
     }
   };
 
-  const handleCombineAll = () => {
-    // Check if at least one section has content
-    if (!content.news && !content.markets && !content.copilot) {
-      toast.error("Please generate at least one section before combining");
-      return;
-    }
-    
-    // Store the content and image URLs in sessionStorage to pass to the combined page
-    sessionStorage.setItem('combinedNewsletter', JSON.stringify({
-      content,
-      imageUrls
-    }));
-    
-    navigate('/combined');
-  };
-
   // Function to handle image generation for a specific section
   const handleGenerateImage = async (section: 'news' | 'markets' | 'copilot') => {
     // Check if we already have content for this section
@@ -249,8 +244,38 @@ const Index = () => {
     }
   };
 
+  const handleCombineAll = () => {
+    // Check if at least one section has content
+    if (!content.news && !content.markets && !content.copilot) {
+      toast.error("Please generate at least one section before combining");
+      return;
+    }
+    
+    // Store the content and image URLs in sessionStorage to pass to the combined page
+    sessionStorage.setItem('combinedNewsletter', JSON.stringify({
+      content,
+      imageUrls
+    }));
+    
+    navigate('/combined');
+  };
+
   // Check if any sections have content
   const hasContent = !!content.news || !!content.markets || !!content.copilot;
+
+  // Add debug useEffect to log when content changes
+  useEffect(() => {
+    console.log("Content state updated:", {
+      news: content.news ? content.news.substring(0, 50) + "..." : "empty",
+      markets: content.markets ? content.markets.substring(0, 50) + "..." : "empty",
+      copilot: content.copilot ? content.copilot.substring(0, 50) + "..." : "empty",
+    });
+  }, [content]);
+
+  // Add debug useEffect to log when image URLs change
+  useEffect(() => {
+    console.log("Image URLs updated:", imageUrls);
+  }, [imageUrls]);
 
   return (
     <div className="min-h-screen px-4 pb-12">

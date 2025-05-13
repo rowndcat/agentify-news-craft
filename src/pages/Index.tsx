@@ -192,10 +192,18 @@ const Index = () => {
     navigate('/combined');
   };
 
-  // Fixed function to handle image generation - explicit type constraint
+  // Function to handle image generation for a specific section
   const handleGenerateImage = async (section: 'news' | 'markets' | 'copilot') => {
+    // Check if we already have content for this section
     if (!content[section]) {
       toast.error(`No ${section} content available. Please generate content first.`);
+      return;
+    }
+
+    // Check if we already have an image URL for this section
+    if (imageUrls[section]) {
+      toast.info(`Image for ${section} section already exists. Opening in new tab...`);
+      window.open(imageUrls[section] as string, '_blank');
       return;
     }
 
@@ -205,12 +213,15 @@ const Index = () => {
       toast.info(`Generating image for ${section} section...`);
       
       // Display loading toast
-      toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
+      const loadingToast = toast.loading(`Processing your ${section} image request. This may take a few moments...`, {
         duration: 15000,
       });
       
       // Call the service function to generate the image
       const imageUrl = await generateSectionImage(section, content[section]);
+      
+      // Dismiss the loading toast
+      toast.dismiss(loadingToast);
       
       if (imageUrl) {
         console.log(`Received image URL for ${section}:`, imageUrl);
@@ -320,7 +331,7 @@ const Index = () => {
             icon="news"
             imageUrl={imageUrls.news}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={content.news ? () => handleGenerateImage("news") : undefined}
+            onGenerateImage={content.news && !imageUrls.news ? () => handleGenerateImage("news") : undefined}
             isGeneratingImage={isGeneratingImage.news}
           />
           
@@ -332,7 +343,7 @@ const Index = () => {
             icon="markets"
             imageUrl={imageUrls.markets}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={content.markets ? () => handleGenerateImage("markets") : undefined}
+            onGenerateImage={content.markets && !imageUrls.markets ? () => handleGenerateImage("markets") : undefined}
             isGeneratingImage={isGeneratingImage.markets}
           />
           
@@ -344,7 +355,7 @@ const Index = () => {
             icon="insights"
             imageUrl={imageUrls.copilot}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={content.copilot ? () => handleGenerateImage("copilot") : undefined}
+            onGenerateImage={content.copilot && !imageUrls.copilot ? () => handleGenerateImage("copilot") : undefined}
             isGeneratingImage={isGeneratingImage.copilot}
           />
         </div>

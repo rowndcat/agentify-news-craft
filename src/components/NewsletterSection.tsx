@@ -237,7 +237,12 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
 
   // Function to handle image view
   const handleViewImage = () => {
-    if (!imageUrl) return;
+    if (!imageUrl) {
+      toast.error(`No ${title} image available yet`);
+      return;
+    }
+    
+    console.log(`Opening image URL: ${imageUrl}`);
     
     // Open the webView link in a new tab
     window.open(imageUrl, '_blank');
@@ -266,6 +271,9 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
   if (hasContent) {
     console.log(`${title} content preview:`, content.substring(0, 100) + "...");
   }
+  
+  // Debug image URL
+  console.log(`${title} image URL:`, imageUrl);
 
   return (
     <>
@@ -328,13 +336,13 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 <span>Section Image</span>
               </div>
               <div className="flex items-center gap-2">
-                {/* Generate Image Button - only show when content is available */}
+                {/* Generate Image Button - only show when content is available and not already generating */}
                 {hasContent && onGenerateImage && (
                   <Button
                     onClick={onGenerateImage}
                     variant="outline"
                     size="sm"
-                    disabled={isGeneratingImage || isWebhookProcessing}
+                    disabled={isGeneratingImage || isWebhookProcessing || Boolean(imageUrl)}
                     className="h-8 px-2 flex items-center gap-1 text-xs"
                   >
                     {isGeneratingImage ? (
@@ -350,13 +358,13 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                     )}
                   </Button>
                 )}
-                {/* View Image Button */}
+                {/* View Image Button - only enable when there's an image URL */}
                 <Button 
                   onClick={handleViewImage} 
                   variant="ghost" 
                   size="sm"
                   disabled={!imageUrl || isWebhookProcessing}
-                  className="h-8 px-2 flex items-center gap-1 text-xs"
+                  className={`h-8 px-2 flex items-center gap-1 text-xs ${imageUrl ? 'text-blue-600 hover:text-blue-800' : ''}`}
                   title="View image"
                 >
                   <Download size={16} />
@@ -368,15 +376,17 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
             >
               {imageUrl ? (
-                <div className="flex flex-col items-center justify-center w-full h-full">
+                <div className="flex flex-col items-center justify-center w-full h-full relative group">
+                  <div className="absolute inset-0 bg-black/5 group-hover:bg-black/10 transition-colors"></div>
                   <a 
                     href={imageUrl} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline flex flex-col items-center"
+                    className="text-blue-500 hover:underline flex flex-col items-center z-10"
                   >
-                    <Image size={32} strokeWidth={1.5} className="mb-2" />
-                    <span className="text-sm break-all px-4 text-center">Click to view image</span>
+                    <Image size={32} strokeWidth={1.5} className="mb-2 text-blue-600" />
+                    <span className="text-sm break-all px-4 text-center">Image available - Click to view</span>
+                    <span className="text-xs text-blue-700 mt-1 max-w-[90%] truncate">{imageUrl}</span>
                   </a>
                 </div>
               ) : isGeneratingImage ? (

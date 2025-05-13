@@ -444,31 +444,64 @@ export const generateSectionImage = async (
       if (imageData && imageData.webViewLink) {
         console.log("Image generated successfully, webViewLink:", imageData.webViewLink);
         return imageData.webViewLink;
-      } else {
-        console.error("No webViewLink in the response");
+      } 
+      // Check for iconLink which is also provided by Google Drive
+      else if (imageData && imageData.iconLink) {
+        console.log("Image generated, using iconLink:", imageData.iconLink);
+        return imageData.iconLink;
+      }
+      // Check for any URL in the response
+      else if (imageData && typeof imageData === 'object') {
+        // Log all keys to help with debugging
+        console.log("Image response keys:", Object.keys(imageData));
         
-        // If we have any URL in the response, try to use it
-        if (imageData && typeof imageData === 'object') {
-          const possibleUrlFields = ['url', 'imageUrl', 'link', 'image', 'src'];
-          for (const field of possibleUrlFields) {
-            if (imageData[field] && typeof imageData[field] === 'string' && 
-                imageData[field].startsWith('http')) {
-              console.log(`Found alternative URL in '${field}' field:`, imageData[field]);
-              return imageData[field];
+        // Try to find any URL-like value in the response
+        for (const key of Object.keys(imageData)) {
+          const value = imageData[key];
+          if (typeof value === 'string' && value.startsWith('http')) {
+            console.log(`Found URL in '${key}' field:`, value);
+            return value;
+          }
+        }
+        
+        // If we have a nested "data" object, check that too
+        if (imageData.data && typeof imageData.data === 'object') {
+          console.log("Checking nested data object for URLs");
+          for (const key of Object.keys(imageData.data)) {
+            const value = imageData.data[key];
+            if (typeof value === 'string' && value.startsWith('http')) {
+              console.log(`Found URL in data.${key} field:`, value);
+              return value;
             }
           }
         }
         
-        // For development, return a placeholder image
-        if (import.meta.env.DEV) {
-          console.log("DEV mode: Using placeholder image");
-          return getPlaceholderImage(section);
+        // Last resort: if the entire response is a simple string URL
+        if (typeof imageData === 'string' && imageData.startsWith('http')) {
+          console.log("Response is a direct URL string:", imageData);
+          return imageData;
         }
         
-        return null;
+        console.error("No URL found in the response:", imageData);
       }
+      
+      // For development, return a placeholder image
+      if (import.meta.env.DEV) {
+        console.log("DEV mode: Using placeholder image");
+        return getPlaceholderImage(section);
+      }
+      
+      return null;
     } else {
       console.error("Failed to get successful response from image webhook:", response.statusText);
+      
+      // Try to log response body for debugging
+      try {
+        const errorText = await response.text();
+        console.error("Error response body:", errorText);
+      } catch (e) {
+        console.error("Could not read error response body");
+      }
       
       // For development, return a placeholder image
       if (import.meta.env.DEV) {

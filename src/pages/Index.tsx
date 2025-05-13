@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -210,6 +211,8 @@ const Index = () => {
       const imageUrl = await generateSectionImage(section, content[section]);
       
       if (imageUrl) {
+        console.log(`Received image URL for ${section}:`, imageUrl);
+        
         // Update image URL for the specific section
         setImageUrls(prev => ({
           ...prev,
@@ -315,7 +318,7 @@ const Index = () => {
             icon="news"
             imageUrl={imageUrls.news}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={() => handleGenerateImage("news")}
+            onGenerateImage={content.news ? () => handleGenerateImage("news") : undefined}
             isGeneratingImage={isGeneratingImage.news}
           />
           
@@ -327,7 +330,7 @@ const Index = () => {
             icon="markets"
             imageUrl={imageUrls.markets}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={() => handleGenerateImage("markets")}
+            onGenerateImage={content.markets ? () => handleGenerateImage("markets") : undefined}
             isGeneratingImage={isGeneratingImage.markets}
           />
           
@@ -339,7 +342,7 @@ const Index = () => {
             icon="insights"
             imageUrl={imageUrls.copilot}
             isWebhookProcessing={isWebhookProcessing}
-            onGenerateImage={() => handleGenerateImage("copilot")}
+            onGenerateImage={content.copilot ? () => handleGenerateImage("copilot") : undefined}
             isGeneratingImage={isGeneratingImage.copilot}
           />
         </div>

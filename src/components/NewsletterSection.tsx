@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Copy, RefreshCw, BarChart2, Newspaper, Lightbulb, Expand, X, Image, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -227,18 +226,14 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
     setInstructions("");
   };
 
-  // New function to handle image download
+  // Function to handle image download
   const handleDownloadImage = () => {
     if (!imageUrl) return;
     
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = `${title.toLowerCase().replace(/\s+/g, '-')}-image.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Open the webView link in a new tab
+    window.open(imageUrl, '_blank');
     
-    toast.success(`${title} image downloaded successfully!`);
+    toast.success(`${title} image opened in new tab!`);
   };
 
   const renderIcon = () => {
@@ -315,7 +310,7 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
           </div>
         </div>
 
-        {/* Image box */}
+        {/* Image section */}
         <div className="px-6 pt-4">
           <div className="bg-gray-100 rounded-md border border-gray-200 p-2 mb-4">
             <div className="flex justify-between items-center mb-2">
@@ -324,13 +319,13 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                 <span>Section Image</span>
               </div>
               <div className="flex items-center gap-2">
-                {/* Generate Image Button */}
-                {hasContent && (
+                {/* Generate Image Button - only show when content is available */}
+                {hasContent && onGenerateImage && (
                   <Button
                     onClick={onGenerateImage}
                     variant="outline"
                     size="sm"
-                    disabled={!hasContent || isGeneratingImage || !onGenerateImage}
+                    disabled={isGeneratingImage || isWebhookProcessing}
                     className="h-8 px-2 flex items-center gap-1 text-xs"
                   >
                     {isGeneratingImage ? (
@@ -346,17 +341,17 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
                     )}
                   </Button>
                 )}
-                {/* Download Button */}
+                {/* View Image Button */}
                 <Button 
                   onClick={handleDownloadImage} 
                   variant="ghost" 
                   size="sm"
                   disabled={!imageUrl || isWebhookProcessing}
                   className="h-8 px-2 flex items-center gap-1 text-xs"
-                  title="Download image"
+                  title="View image"
                 >
                   <Download size={16} />
-                  <span>Download</span>
+                  <span>View</span>
                 </Button>
               </div>
             </div>
@@ -364,11 +359,17 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
               className="h-[140px] bg-gray-200 rounded flex items-center justify-center overflow-hidden"
             >
               {imageUrl ? (
-                <img 
-                  src={imageUrl} 
-                  alt={`${title} visual`} 
-                  className="w-full h-full object-cover"
-                />
+                <div className="flex flex-col items-center justify-center w-full h-full">
+                  <a 
+                    href={imageUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline flex flex-col items-center"
+                  >
+                    <Image size={32} strokeWidth={1.5} className="mb-2" />
+                    <span className="text-sm break-all px-4 text-center">Click to view image</span>
+                  </a>
+                </div>
               ) : isGeneratingImage ? (
                 <div className="text-gray-400 flex flex-col items-center">
                   <LoadingSpinner size="sm" />
@@ -441,20 +442,18 @@ const NewsletterSection: React.FC<NewsletterSectionProps> = ({
           <ScrollArea className="h-[calc(100vh-4rem)] p-6 md:p-8 lg:p-12 font-tiempos">
             <div className="max-w-4xl mx-auto">
               {imageUrl && (
-                <div className="mb-8 relative">
-                  <img 
-                    src={imageUrl} 
-                    alt={`${title} visual`} 
-                    className="w-full rounded-lg shadow-md"
-                  />
-                  <Button 
-                    onClick={handleDownloadImage}
-                    className="absolute top-4 right-4 bg-white/80 hover:bg-white text-gray-800 shadow-md"
-                    size="sm"
+                <div className="mb-8 text-center">
+                  <a 
+                    href={imageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block"
                   >
-                    <Download size={16} className="mr-1" />
-                    Download
-                  </Button>
+                    <Button className="bg-white/80 hover:bg-white text-gray-800 shadow-md">
+                      <Image size={16} className="mr-2" />
+                      View Generated Image
+                    </Button>
+                  </a>
                 </div>
               )}
               <div 

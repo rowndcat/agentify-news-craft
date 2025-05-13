@@ -189,8 +189,8 @@ const Index = () => {
     navigate('/combined');
   };
 
-  // New function to handle image generation
-  const handleGenerateImage = async (section: keyof NewsletterSections) => {
+  // Fixed function to handle image generation - using correct type constraint
+  const handleGenerateImage = async (section: 'news' | 'markets' | 'copilot') => {
     if (!content[section]) {
       toast.error(`No ${section} content available. Please generate content first.`);
       return;

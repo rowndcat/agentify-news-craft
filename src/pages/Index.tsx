@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -100,19 +101,19 @@ const Index = () => {
       toast.info("Sending request to generate newsletter...");
       
       // Update with a more informative toast that explains the waiting process
-      const loadingToastId = toast.loading("Processing your newsletter request. This may take up to 30 seconds...", {
-        duration: 60000, // Increase duration to 60 seconds to ensure it stays visible
+      const loadingToastId = toast.loading("Processing your newsletter request. This may take up to 2 minutes...", {
+        duration: 120000, // Increase duration to 2 minutes to ensure it stays visible
       });
       
       // Set a timeout to check if the webhook is taking too long
       timeoutRef.current = setTimeout(() => {
-        // If we're still loading after 45 seconds, show a notification
+        // If we're still loading after 90 seconds, show a notification
         if (isWebhookProcessing) {
           toast.info("Still waiting for webhook response. This might take a little longer than expected...", {
-            duration: 10000,
+            duration: 30000,
           });
         }
-      }, 45000);
+      }, 90000);
       
       const result = await generateNewsletter(payload);
       
@@ -197,19 +198,19 @@ const Index = () => {
       toast.info(`Sending ${section} regeneration request...`);
       
       // Update with a more informative toast that explains the waiting process
-      const loadingToastId = toast.loading(`Processing your ${section} regeneration. This may take up to 30 seconds...`, {
-        duration: 60000, // Increase duration to 60 seconds
+      const loadingToastId = toast.loading(`Processing your ${section} regeneration. This may take up to 2 minutes...`, {
+        duration: 120000, // Increase duration to 2 minutes
       });
       
       // Set a timeout to check if the webhook is taking too long
       timeoutRef.current = setTimeout(() => {
-        // If we're still loading after 45 seconds, show a notification
+        // If we're still loading after 90 seconds, show a notification
         if (isWebhookProcessing) {
           toast.info(`Still waiting for ${section} webhook response. This might take a little longer than expected...`, {
-            duration: 10000,
+            duration: 30000,
           });
         }
-      }, 45000);
+      }, 90000);
       
       // Get regenerated section using the regenerateSection function
       const regeneratedContent = await regenerateSection(
@@ -344,13 +345,23 @@ const Index = () => {
     console.log("Webhook processing state changed:", isWebhookProcessing);
   }, [isWebhookProcessing]);
 
+  // Log actual UI state on each render
+  useEffect(() => {
+    console.log("AI News content available:", content.news ? "Yes" : "No");
+    console.log("AI News image URL:", imageUrls.news);
+    console.log("Markets & Economy content available:", content.markets ? "Yes" : "No");
+    console.log("Markets & Economy image URL:", imageUrls.markets);
+    console.log("Copilot content available:", content.copilot ? "Yes" : "No");
+    console.log("Copilot image URL:", imageUrls.copilot);
+  });
+
   return (
     <div className="min-h-screen px-4 pb-12">
       <header className="container pt-8 pb-12">
         <div className="max-w-4xl mx-auto">
           {isWebhookProcessing && (
             <Announcement 
-              message="Your request is being processed. This may take up to 30 seconds. Please wait..." 
+              message="Your request is being processed. This may take up to 2 minutes. Please wait..." 
               type="info"
             />
           )}

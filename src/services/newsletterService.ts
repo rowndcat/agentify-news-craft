@@ -30,14 +30,20 @@ export const generateNewsletter = async (payload: {
   console.log("Generating newsletter with payload:", payload);
 
   try {
-    // Send request to the webhook
+    // Send request to the webhook with a longer timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout
+    
     const response = await fetch(CHAT_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     // Check if the response is OK
     if (!response.ok) {
@@ -60,6 +66,24 @@ export const generateNewsletter = async (payload: {
     console.log("Full response text length:", fullText.length);
     console.log("First 100 characters:", fullText.substring(0, 100));
     console.log("Last 100 characters:", fullText.substring(fullText.length - 100));
+
+    // If the response has 'output' property directly, check if it's a structured object
+    if (responseData.output) {
+      console.log("Output property found in response:", responseData.output);
+      
+      // If output is already parsed into sections
+      if (typeof responseData.output === 'object' && responseData.output.news) {
+        console.log("Found structured output with news section");
+        return {
+          news: responseData.output.news || "",
+          markets: responseData.output.markets || "",
+          copilot: responseData.output.copilot || "",
+          newsImage: responseData.newsImage || null,
+          marketsImage: responseData.marketsImage || null,
+          copilotImage: responseData.copilotImage || null,
+        };
+      }
+    }
 
     // Use the improved parsing logic to separate sections
     const sections = separateNewsSections(fullText);
@@ -110,7 +134,7 @@ export const regenerateSection = async (
 
     // Send request to the webhook with a longer timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout
     
     const response = await fetch(CHAT_WEBHOOK_URL, {
       method: "POST",
@@ -140,6 +164,12 @@ export const regenerateSection = async (
     if (!responseData || !responseData.text) {
       console.error("Invalid webhook response - missing text");
       throw new Error("Invalid webhook response");
+    }
+
+    // Check if the response has direct section data
+    if (responseData.output && typeof responseData.output === 'object' && responseData.output[section]) {
+      console.log(`Found direct ${section} content in output object`);
+      return responseData.output[section];
     }
 
     // The webhook might return all sections or just the one we want
@@ -237,137 +267,231 @@ function separateNewsSections(fullText: string): NewsletterSections {
     // Log full text for debugging
     console.log("Full text to separate:", fullText.substring(0, 200) + "...");
 
-    // Check for specific section markers with markdown or plain text
-    const newsPattern = /(?:\*\*News Section\*\*|\bNews Section\b)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i;
-    const marketsPattern = /(?:\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i;
-    const copilotPattern = /(?:\*\*Copilot Section\*\*|\bCopilot Section\b)([\s\S]*?)$/i;
+    // Check if this is a direct output object string
+    try {
+      const jsonOutput = JSON.parse(fullText);
+      if (jsonOutput && typeof jsonOutput === 'object') {
+        if (jsonOutput.news || jsonOutput.markets || jsonOutput.copilot) {
+          console.log("Found JSON structure with direct section keys");
+          return {
+            news: jsonOutput.news || "",
+            markets: jsonOutput.markets || "",
+            copilot: jsonOutput.copilot || ""
+          };
+        }
+        
+        // Check for output key
+        if (jsonOutput.output && typeof jsonOutput.output === 'object') {
+          if (jsonOutput.output.news || jsonOutput.output.markets || jsonOutput.output.copilot) {
+            console.log("Found nested output with section keys");
+            return {
+              news: jsonOutput.output.news || "",
+              markets: jsonOutput.output.markets || "",
+              copilot: jsonOutput.output.copilot || ""
+            };
+          }
+        }
+      }
+    } catch (e) {
+      // Not JSON, continue with other methods
+      console.log("Text is not JSON, continuing with section parsing");
+    }
 
-    // Extract sections using the patterns
-    const newsMatch = fullText.match(newsPattern);
-    const marketsMatch = fullText.match(marketsPattern);
-    const copilotMatch = fullText.match(copilotPattern);
+    // Try parsing by section headers with variations
+    // News section patterns
+    const newsPatterns = [
+      /(?:\*\*News Section\*\*|\bNews Section\b)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
+      /(?:\*\*Title:.*?\*\*)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
+      /(?:BULLET POINTS:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
+      /(?:TL;DR:)([\s\S]*?)(?=\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b|\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i
+    ];
+    
+    // Markets section patterns
+    const marketsPatterns = [
+      /(?:\*\*Economy & Markets Section\*\*|\bEconomy & Markets Section\b|\*\*Markets Section\*\*|\bMarkets Section\b)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|---+|$)/i,
+      /(?:🌍 Big Picture)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i,
+      /(?:📈 What to Watch)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i,
+      /(?:🔑 Key Takeaway)([\s\S]*?)(?=\*\*Copilot Section\*\*|\bCopilot Section\b|TIME:|TIME –|---+|$)/i
+    ];
+    
+    // Copilot section patterns
+    const copilotPatterns = [
+      /(?:\*\*Copilot Section\*\*|\bCopilot Section\b)([\s\S]*?)$/i,
+      /(?:- \*\*Theme: TIME.*?\*\*)([\s\S]*?)$/i,
+      /(?:TIME:|TIME –|TIME theme)([\s\S]*?)$/i,
+      /(?:ATTENTION.*?theme)([\s\S]*?)$/i,
+      /(?:PROFIT\/PROGRESS.*?theme)([\s\S]*?)$/i
+    ];
 
-    console.log("News section match:", newsMatch ? "found" : "not found");
-    console.log("Markets section match:", marketsMatch ? "found" : "not found");
-    console.log("Copilot section match:", copilotMatch ? "found" : "not found");
+    // Try to match each pattern for each section
+    for (const pattern of newsPatterns) {
+      const match = fullText.match(pattern);
+      if (match && match[1]) {
+        sections.news = cleanupSection(match[1]);
+        console.log("News section found with pattern:", pattern);
+        break;
+      }
+    }
+    
+    for (const pattern of marketsPatterns) {
+      const match = fullText.match(pattern);
+      if (match && match[1]) {
+        sections.markets = cleanupSection(match[1]);
+        console.log("Markets section found with pattern:", pattern);
+        break;
+      }
+    }
+    
+    for (const pattern of copilotPatterns) {
+      const match = fullText.match(pattern);
+      if (match && match[1]) {
+        sections.copilot = cleanupSection(match[1]);
+        console.log("Copilot section found with pattern:", pattern);
+        break;
+      }
+    }
 
-    // Look for section dividers if direct patterns didn't work
-    if (!newsMatch && !marketsMatch && !copilotMatch) {
+    // Try divider method if patterns didn't work
+    if (!sections.news && !sections.markets && !sections.copilot) {
       console.log("Trying divider method...");
       // Try divider method (---) which is often used to separate sections
       const dividers = fullText.split(/---+/);
       
       if (dividers.length >= 3) {
         // If we have at least 3 sections separated by dividers
-        // Assume the ordering: news, markets, copilot
         sections.news = cleanupSection(dividers[0]);
         sections.markets = cleanupSection(dividers[1]);
         sections.copilot = cleanupSection(dividers.slice(2).join("\n---\n"));  // Combine any additional dividers
         
         console.log("Used divider method for section separation");
       }
-    } else {
-      // Use the regex matches if available
-      if (newsMatch && newsMatch[1]) {
-        sections.news = cleanupSection(newsMatch[1]);
-      }
-      
-      if (marketsMatch && marketsMatch[1]) {
-        sections.markets = cleanupSection(marketsMatch[1]);
-      }
-      
-      if (copilotMatch && copilotMatch[1]) {
-        sections.copilot = cleanupSection(copilotMatch[1]);
-      }
-      
-      console.log("Used regex patterns for section separation");
     }
 
-    // If we still don't have all sections, try looking for alternative headers
+    // If still no luck, try keyword-based sectioning
     if (!sections.news || !sections.markets || !sections.copilot) {
-      console.log("Some sections still missing, trying alternative headers...");
+      console.log("Some sections still missing, trying keyword-based sectioning...");
       
-      // Look for content indicators specific to each section
-      const titlePattern = /\*\*Title:(.*?)\*\*/;
-      const bulletPointsPattern = /BULLET POINTS:/;
-      const bigPicturePattern = /🌍 Big Picture/;
-      const timeThemePattern = /TIME:|TIME –|TIME theme/i;
+      // Check for content specific to each section
+      const newsKeywords = ["AI News", "News Section", "Title:", "TL;DR", "BULLET POINTS", "Top article"];
+      const marketsKeywords = ["Economy & Markets", "Markets Section", "Big Picture", "What to Watch", "Key Takeaway"];
+      const copilotKeywords = ["Copilot Section", "Theme: TIME", "Theme: ATTENTION", "Theme: PROFIT", "PROGRESS"];
       
-      // If we don't have news content but can find title/bullet points
-      if (!sections.news && (fullText.match(titlePattern) || fullText.match(bulletPointsPattern))) {
-        // Extract from the start until we find a markets or copilot indicator
-        const endIndex = fullText.search(/(?:Economy & Markets|🌍 Big Picture|Copilot Section|TIME:|TIME –)/i);
-        if (endIndex > 0) {
-          sections.news = cleanupSection(fullText.substring(0, endIndex));
+      // Look for these keywords to identify where sections begin
+      let newsStart = -1, marketsStart = -1, copilotStart = -1;
+      
+      for (const keyword of newsKeywords) {
+        const index = fullText.indexOf(keyword);
+        if (index !== -1 && (newsStart === -1 || index < newsStart)) {
+          newsStart = index;
         }
       }
       
-      // If we don't have markets content but can find big picture
-      if (!sections.markets && fullText.match(bigPicturePattern)) {
-        const startIndex = fullText.search(/(?:🌍 Big Picture)/i);
-        const endIndex = fullText.search(/(?:Copilot Section|TIME:|TIME –)/i);
-        if (startIndex > 0 && endIndex > startIndex) {
-          sections.markets = cleanupSection(fullText.substring(startIndex, endIndex));
+      for (const keyword of marketsKeywords) {
+        const index = fullText.indexOf(keyword);
+        if (index !== -1 && (marketsStart === -1 || index < marketsStart)) {
+          marketsStart = index;
         }
       }
       
-      // If we don't have copilot content but can find TIME theme
-      if (!sections.copilot && fullText.match(timeThemePattern)) {
-        const startIndex = fullText.search(/(?:TIME:|TIME –|TIME theme)/i);
-        if (startIndex > 0) {
-          sections.copilot = cleanupSection(fullText.substring(startIndex));
+      for (const keyword of copilotKeywords) {
+        const index = fullText.indexOf(keyword);
+        if (index !== -1 && (copilotStart === -1 || index < copilotStart)) {
+          copilotStart = index;
         }
       }
       
-      console.log("After alternative headers search:");
-      console.log("News found:", Boolean(sections.news));
-      console.log("Markets found:", Boolean(sections.markets));
-      console.log("Copilot found:", Boolean(sections.copilot));
+      // If we found start positions, determine section boundaries
+      if (newsStart !== -1 || marketsStart !== -1 || copilotStart !== -1) {
+        console.log("Found keyword positions:", {newsStart, marketsStart, copilotStart});
+        
+        // Sort the start indices to determine section boundaries
+        const startIndices = [
+          { type: 'news', index: newsStart },
+          { type: 'markets', index: marketsStart },
+          { type: 'copilot', index: copilotStart }
+        ].filter(item => item.index !== -1)
+         .sort((a, b) => a.index - b.index);
+        
+        // Extract sections based on the sorted indices
+        for (let i = 0; i < startIndices.length; i++) {
+          const currentType = startIndices[i].type;
+          const start = startIndices[i].index;
+          const end = i < startIndices.length - 1 ? startIndices[i + 1].index : undefined;
+          
+          const content = fullText.substring(start, end);
+          
+          if (currentType === 'news' && !sections.news) {
+            sections.news = cleanupSection(content);
+          } else if (currentType === 'markets' && !sections.markets) {
+            sections.markets = cleanupSection(content);
+          } else if (currentType === 'copilot' && !sections.copilot) {
+            sections.copilot = cleanupSection(content);
+          }
+        }
+      }
     }
     
-    // Fallback: If all else fails, try to split text into roughly equal thirds
-    if (!sections.news && !sections.markets && !sections.copilot) {
-      console.log("No sections found through patterns, using fallback division method");
+    // If sections are still empty or extremely short (likely incorrect), try a simple split
+    if (!sections.news || !sections.markets || !sections.copilot || 
+        sections.news.length < 20 || sections.markets.length < 20 || sections.copilot.length < 20) {
+      console.log("Some sections are still missing or too short, trying simple split...");
       
-      const lines = fullText.split("\n");
-      const segmentSize = Math.floor(lines.length / 3);
+      // Split on multiple newlines which often indicate section breaks
+      const chunks = fullText.split(/\n\s*\n\s*\n+/);
       
-      sections.news = cleanupSection(lines.slice(0, segmentSize).join("\n"));
-      sections.markets = cleanupSection(lines.slice(segmentSize, segmentSize * 2).join("\n"));
-      sections.copilot = cleanupSection(lines.slice(segmentSize * 2).join("\n"));
+      if (chunks.length >= 3) {
+        // Find the most likely news, markets, and copilot chunks based on keywords
+        for (const chunk of chunks) {
+          // Skip very small chunks
+          if (chunk.length < 20) continue;
+          
+          // Check if this chunk has news-specific content and we don't have news yet
+          if (!sections.news || sections.news.length < 20) {
+            if (/news|title|tl;dr|bullet points|top article/i.test(chunk)) {
+              sections.news = cleanupSection(chunk);
+              continue;
+            }
+          }
+          
+          // Check if this chunk has markets-specific content and we don't have markets yet
+          if (!sections.markets || sections.markets.length < 20) {
+            if (/economy|markets|big picture|what to watch|key takeaway/i.test(chunk)) {
+              sections.markets = cleanupSection(chunk);
+              continue;
+            }
+          }
+          
+          // Check if this chunk has copilot-specific content and we don't have copilot yet
+          if (!sections.copilot || sections.copilot.length < 20) {
+            if (/copilot|theme|time|attention|profit|progress/i.test(chunk)) {
+              sections.copilot = cleanupSection(chunk);
+              continue;
+            }
+          }
+        }
+      }
     }
-    
-    // If any section is still empty, use the full text for that section
-    if (!sections.news && !sections.markets && !sections.copilot) {
-      console.log("All section detection methods failed, using full text as news section");
-      sections.news = cleanupSection(fullText);
-    } else if (!sections.news && !sections.markets) {
-      console.log("News and markets sections not found, splitting remaining content");
-      const remainingText = fullText.replace(sections.copilot, "");
-      const midpoint = Math.floor(remainingText.length / 2);
-      sections.news = cleanupSection(remainingText.substring(0, midpoint));
-      sections.markets = cleanupSection(remainingText.substring(midpoint));
-    } else if (!sections.news && !sections.copilot) {
-      console.log("News and copilot sections not found, splitting remaining content");
-      const remainingText = fullText.replace(sections.markets, "");
-      const midpoint = Math.floor(remainingText.length / 2);
-      sections.news = cleanupSection(remainingText.substring(0, midpoint));
-      sections.copilot = cleanupSection(remainingText.substring(midpoint));
-    } else if (!sections.markets && !sections.copilot) {
-      console.log("Markets and copilot sections not found, splitting remaining content");
-      const remainingText = fullText.replace(sections.news, "");
-      const midpoint = Math.floor(remainingText.length / 2);
-      sections.markets = cleanupSection(remainingText.substring(0, midpoint));
-      sections.copilot = cleanupSection(remainingText.substring(midpoint));
-    } else if (!sections.news) {
-      console.log("News section not found, using remaining text");
-      sections.news = cleanupSection(fullText.replace(sections.markets, "").replace(sections.copilot, ""));
-    } else if (!sections.markets) {
-      console.log("Markets section not found, using remaining text");
-      sections.markets = cleanupSection(fullText.replace(sections.news, "").replace(sections.copilot, ""));
-    } else if (!sections.copilot) {
-      console.log("Copilot section not found, using remaining text");
-      sections.copilot = cleanupSection(fullText.replace(sections.news, "").replace(sections.markets, ""));
+
+    // Last resort: If still empty, divide content into three equal parts
+    if (!sections.news || !sections.markets || !sections.copilot) {
+      console.log("Using equal division as last resort...");
+      const lines = fullText.split('\n');
+      const segmentSize = Math.ceil(lines.length / 3);
+      
+      if (!sections.news) {
+        sections.news = cleanupSection(lines.slice(0, segmentSize).join('\n'));
+      }
+      
+      if (!sections.markets) {
+        const start = Math.min(segmentSize, lines.length);
+        const end = Math.min(segmentSize * 2, lines.length);
+        sections.markets = cleanupSection(lines.slice(start, end).join('\n'));
+      }
+      
+      if (!sections.copilot) {
+        const start = Math.min(segmentSize * 2, lines.length);
+        sections.copilot = cleanupSection(lines.slice(start).join('\n'));
+      }
     }
     
     // Add section headers if they don't exist

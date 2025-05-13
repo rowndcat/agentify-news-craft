@@ -1,4 +1,3 @@
-
 // Define the section types
 export interface NewsletterSections {
   news: string;
@@ -59,9 +58,17 @@ export const generateNewsletter = async (payload: any): Promise<NewsletterSectio
           // Check if the webhook returned content in the expected format
           if (webhookData && webhookData.output) {
             console.log("Using direct webhook response content");
+            console.log("Webhook output received:", webhookData.output.substring(0, 200) + "...");
             
             // Parse the webhook output which is a single markdown string with sections
             const sections = parseWebhookOutput(webhookData.output);
+            
+            // Log the parsed sections to help debugging
+            console.log("Parsed sections:", {
+              news: sections.news ? `${sections.news.substring(0, 50)}...` : "None",
+              markets: sections.markets ? `${sections.markets.substring(0, 50)}...` : "None",
+              copilot: sections.copilot ? `${sections.copilot.substring(0, 50)}...` : "None"
+            });
             
             // Return the parsed sections if valid
             if (sections.news || sections.markets || sections.copilot) {
@@ -163,38 +170,47 @@ const parseWebhookOutput = (output: string): NewsletterSections => {
     copilot: ""
   };
   
-  // Split the output by section markers
-  const parts = output.split("---");
-  
-  // Process each part to identify sections
-  parts.forEach(part => {
-    // Clean up the part
-    const trimmedPart = part.trim();
+  try {
+    // Split the output by section markers
+    const parts = output.split("---");
+    console.log(`Split output into ${parts.length} parts`);
     
-    // Identify sections based on headers
-    if (trimmedPart.includes("**News Section**") || 
-        trimmedPart.includes("### **News Section**")) {
-      sections.news = trimmedPart;
+    // Process each part to identify sections
+    parts.forEach((part, index) => {
+      // Clean up the part
+      const trimmedPart = part.trim();
+      console.log(`Processing part ${index + 1}, starts with: ${trimmedPart.substring(0, 30)}...`);
       
-      // Use a placeholder image for news
-      sections.newsImage = sections.newsImage || "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
-    } 
-    else if (trimmedPart.includes("**Economy & Markets Section**") || 
-             trimmedPart.includes("### **Economy & Markets Section**")) {
-      sections.markets = trimmedPart;
-      
-      // Use a placeholder image for markets
-      sections.marketsImage = sections.marketsImage || "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
-    } 
-    else if (trimmedPart.includes("**Copilot Section**") || 
-             trimmedPart.includes("### **Copilot Section**") ||
-             trimmedPart.includes("**AI Copilot**")) {
-      sections.copilot = trimmedPart;
-      
-      // Use a placeholder image for copilot
-      sections.copilotImage = sections.copilotImage || "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
-    }
-  });
+      // Identify sections based on headers
+      if (trimmedPart.includes("**News Section**") || 
+          trimmedPart.includes("### **News Section**")) {
+        console.log("Found News section");
+        sections.news = trimmedPart;
+        
+        // Use a placeholder image for news
+        sections.newsImage = sections.newsImage || "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&w=800&h=400";
+      } 
+      else if (trimmedPart.includes("**Economy & Markets Section**") || 
+              trimmedPart.includes("### **Economy & Markets Section**")) {
+        console.log("Found Markets section");
+        sections.markets = trimmedPart;
+        
+        // Use a placeholder image for markets
+        sections.marketsImage = sections.marketsImage || "https://images.unsplash.com/photo-1460574283810-2aab119d8511?auto=format&fit=crop&w=800&h=400";
+      } 
+      else if (trimmedPart.includes("**Copilot Section**") || 
+              trimmedPart.includes("### **Copilot Section**") ||
+              trimmedPart.includes("**AI Copilot**")) {
+        console.log("Found Copilot section");
+        sections.copilot = trimmedPart;
+        
+        // Use a placeholder image for copilot
+        sections.copilotImage = sections.copilotImage || "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&h=400";
+      }
+    });
+  } catch (error) {
+    console.error("Error parsing sections:", error);
+  }
   
   // Log the extracted sections
   console.log("Parsed news section:", sections.news ? sections.news.substring(0, 50) + "..." : "None");

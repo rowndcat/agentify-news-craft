@@ -88,6 +88,9 @@ const Index = () => {
       const result = await generateNewsletter(payload);
       
       console.log("Generate all result:", result);
+      console.log("News content received:", result.news ? result.news.substring(0, 100) + "..." : "None");
+      console.log("Markets content received:", result.markets ? result.markets.substring(0, 100) + "..." : "None");
+      console.log("Copilot content received:", result.copilot ? result.copilot.substring(0, 100) + "..." : "None");
       
       // Check for image URLs in the response
       if (result.newsImage) console.log("News image URL received:", result.newsImage);
@@ -231,7 +234,7 @@ const Index = () => {
   };
 
   // Check if any sections have content
-  const hasContent = content.news || content.markets || content.copilot;
+  const hasContent = !!content.news || !!content.markets || !!content.copilot;
 
   return (
     <div className="min-h-screen px-4 pb-12">

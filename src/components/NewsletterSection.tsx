@@ -60,11 +60,12 @@ const formatMarkdown = (text: string): string => {
     // Format bullet points and sections
     formattedText = formattedText
       .replace(/BULLET POINTS:/g, '<p class="font-semibold mt-3 mb-1">BULLET POINTS:</p>')
-      .replace(/KEY TAKEAWAY:/g, '<p class="font-semibold mt-3 mb-1">KEY TAKEAWAY:</p>');
+      .replace(/KEY TAKEAWAY:/g, '<p class="font-semibold mt-3 mb-1">KEY TAKEAWAY:</p>')
+      .replace(/\*\*Why this matters\*\*:/g, '<p class="font-semibold mt-3 mb-1">Why this matters:</p>');
       
     // Format additional links section
     formattedText = formattedText
-      .replace(/#### 7 Additional News Links:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
+      .replace(/\*\*7 Additional News Links\*\*:/g, '<h4 class="text-base font-medium mt-4 mb-2">7 Additional News Links:</h4>')
       .replace(/\*\*Top article:\*\*/g, '<strong class="block mb-1">Top article:</strong>');
   }
   
@@ -120,7 +121,10 @@ const formatMarkdown = (text: string): string => {
       .replace(/\*\*Expected Outputs:\*\*/g, '<p class="font-semibold mt-3 mb-1">Expected Outputs:</p>')
       .replace(/\*\*Deliverables:\*\*/g, '<p class="font-medium mt-2 mb-1">Deliverables:</p>')
       .replace(/\*\*Format\/Structure of Output:\*\*/g, '<p class="font-medium mt-2 mb-1">Format/Structure of Output:</p>')
-      .replace(/\*\*Success Criteria:\*\*/g, '<p class="font-semibold mt-3 mb-1">Success Criteria:</p>');
+      .replace(/\*\*Success Criteria:\*\*/g, '<p class="font-semibold mt-3 mb-1">Success Criteria:</p>')
+      .replace(/\*\*TIME – Reclaim Your Hours\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">TIME – Reclaim Your Hours</h3>')
+      .replace(/\*\*ATTENTION – Amplify Your Voice\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">ATTENTION – Amplify Your Voice</h3>')
+      .replace(/\*\*PROFIT\/PROGRESS – Scale Your Impact\*\*/g, '<h3 class="text-lg font-medium mb-2 mt-4">PROFIT/PROGRESS – Scale Your Impact</h3>');
   }
   
   // Replace markdown headers (that haven't been processed already)
@@ -134,6 +138,7 @@ const formatMarkdown = (text: string): string => {
     // Italic
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     // Bullet lists - handle multiple formats
+    .replace(/^- (.*?)$/gm, '<li>$1</li>')
     .replace(/^\- (.*?)$/gm, '<li>$1</li>')
     .replace(/^\• (.*?)$/gm, '<li>$1</li>')
     // Numbered lists

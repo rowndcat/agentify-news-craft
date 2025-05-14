@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 // Define types
@@ -5,6 +6,72 @@ export interface NewsletterSections {
   news: string;
   markets: string;
   copilot: string;
+}
+
+// Function to extract sections from markdown text
+function extractSectionsFromMarkdown(text: string): NewsletterSections {
+  console.log("Extracting sections from markdown text:", text.substring(0, 100) + "...");
+  
+  const sections: NewsletterSections = {
+    news: "",
+    markets: "",
+    copilot: ""
+  };
+  
+  // Use regex to find each section
+  const newsPattern = /#+\s*\*?\*?(?:News Section|AI News)\*?\*?[\s\S]*?(?=#+\s*\*?\*?(?:Economy|Markets|Copilot)|$)/i;
+  const marketsPattern = /#+\s*\*?\*?(?:Economy\s*&\s*Markets Section|Markets\s*&\s*Economy)\*?\*?[\s\S]*?(?=#+\s*\*?\*?(?:News|Copilot)|$)/i;
+  const copilotPattern = /#+\s*\*?\*?(?:Copilot Section|AI Copilot)\*?\*?[\s\S]*?(?=#+\s*\*?\*?(?:News|Economy|Markets)|$)/i;
+  
+  // Extract each section
+  const newsMatch = text.match(newsPattern);
+  const marketsMatch = text.match(marketsPattern);
+  const copilotMatch = text.match(copilotPattern);
+  
+  if (newsMatch) {
+    sections.news = newsMatch[0].trim();
+    console.log("Found news section:", sections.news.substring(0, 50) + "...");
+  }
+  
+  if (marketsMatch) {
+    sections.markets = marketsMatch[0].trim();
+    console.log("Found markets section:", sections.markets.substring(0, 50) + "...");
+  }
+  
+  if (copilotMatch) {
+    sections.copilot = copilotMatch[0].trim();
+    console.log("Found copilot section:", sections.copilot.substring(0, 50) + "...");
+  }
+  
+  // If no sections were found, try a more lenient approach
+  if (!sections.news && !sections.markets && !sections.copilot) {
+    console.log("No sections found with strict patterns. Using more lenient approach.");
+    
+    // Split by major headings and try to categorize
+    const sectionBlocks = text.split(/#{2,3}\s+\*?\*?/);
+    
+    for (const block of sectionBlocks) {
+      if (!block.trim()) continue;
+      
+      const lowerBlock = block.toLowerCase();
+      
+      if ((lowerBlock.includes("news") || lowerBlock.includes("ai news")) && !sections.news) {
+        sections.news = "### **News Section**\n" + block.trim();
+      } else if ((lowerBlock.includes("economy") || lowerBlock.includes("market")) && !sections.markets) {
+        sections.markets = "### **Economy & Markets Section**\n" + block.trim();
+      } else if ((lowerBlock.includes("copilot") || lowerBlock.includes("ai copilot")) && !sections.copilot) {
+        sections.copilot = "### **Copilot Section**\n" + block.trim();
+      }
+    }
+  }
+  
+  // If still no sections found, just use the whole text as news
+  if (!sections.news && !sections.markets && !sections.copilot) {
+    console.log("No sections found even with lenient patterns. Using full text as news section.");
+    sections.news = "### **News Section**\n" + text.trim();
+  }
+  
+  return sections;
 }
 
 // Function to generate the newsletter content with improved error handling and retries

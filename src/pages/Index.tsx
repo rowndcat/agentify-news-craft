@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import NewsletterSection from "@/components/NewsletterSection";
@@ -74,10 +73,10 @@ const Index = () => {
     setIsWebhookProcessing(true);
     
     try {
-      // Create the proper payload structure with chatId and exact "generate newsletter" message
+      // Create the proper payload structure with chatId and message that matches the screenshot
       const payload = {
         chatId: chatId,
-        message: "generate newsletter"
+        message: "Generate newsletter with news, markets, and copilot sections"
       };
       
       console.log("Generate all request payload:", payload);

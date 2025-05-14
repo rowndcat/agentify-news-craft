@@ -74,10 +74,10 @@ const Index = () => {
     setIsWebhookProcessing(true);
     
     try {
-      // Create the proper payload structure with chatId and message
+      // Create the proper payload structure with chatId and exact "generate newsletter" message
       const payload = {
         chatId: chatId,
-        message: "Generate newsletter with news, markets, and copilot sections"
+        message: "generate newsletter"
       };
       
       console.log("Generate all request payload:", payload);

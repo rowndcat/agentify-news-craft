@@ -64,6 +64,10 @@ const Index = () => {
 
   // Add a state to track when webhook processing is happening
   const [isWebhookProcessing, setIsWebhookProcessing] = useState(false);
+  
+  // Add a state to track retry attempts
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 2;
 
   const handleGenerateAll = async () => {
     setIsLoading(prev => ({ ...prev, all: true, news: true, markets: true, copilot: true }));
@@ -82,56 +86,79 @@ const Index = () => {
       toast.info("Sending request to generate newsletter...");
       
       // Update with a more informative toast that explains the waiting process
-      toast.loading("Processing your newsletter request. This may take up to 2 minutes...", {
-        duration: 120000, // Increased from 30s to 2min
+      const loadingToastId = toast.loading("Processing your newsletter request. This may take up to 2 minutes...", {
+        duration: 150000, // Increased to 2.5min
       });
       
-      const result = await generateNewsletter(payload);
-      
-      console.log("Generate all result:", result);
-      console.log("News content received:", result.news ? result.news.substring(0, 100) + "..." : "None");
-      console.log("Markets content received:", result.markets ? result.markets.substring(0, 100) + "..." : "None");
-      console.log("Copilot content received:", result.copilot ? result.copilot.substring(0, 100) + "..." : "None");
-      
-      // Check for image URLs in the response
-      if (result.newsImage) console.log("News image URL received:", result.newsImage);
-      if (result.marketsImage) console.log("Markets image URL received:", result.marketsImage);
-      if (result.copilotImage) console.log("Copilot image URL received:", result.copilotImage);
-      
-      if (result) {
-        // Force state update with the received sections, with fallbacks to prevent empty updates
-        setContent(prev => ({
-          news: result.news || prev.news,
-          markets: result.markets || prev.markets,
-          copilot: result.copilot || prev.copilot,
-        }));
+      try {
+        const result = await generateNewsletter(payload);
+        toast.dismiss(loadingToastId);
         
-        // Update image URLs
-        setImageUrls(prev => ({
-          news: result.newsImage || prev.news,
-          markets: result.marketsImage || prev.markets,
-          copilot: result.copilotImage || prev.copilot,
-        }));
+        console.log("Generate all result:", result);
+        console.log("News content received:", result.news ? result.news.substring(0, 100) + "..." : "None");
+        console.log("Markets content received:", result.markets ? result.markets.substring(0, 100) + "..." : "None");
+        console.log("Copilot content received:", result.copilot ? result.copilot.substring(0, 100) + "..." : "None");
         
-        // Check if any content was actually returned
-        if (result.news || result.markets || result.copilot) {
-          let sections = [];
-          if (result.news) sections.push("News");
-          if (result.markets) sections.push("Markets");
-          if (result.copilot) sections.push("Copilot");
+        // Check for image URLs in the response
+        if (result.newsImage) console.log("News image URL received:", result.newsImage);
+        if (result.marketsImage) console.log("Markets image URL received:", result.marketsImage);
+        if (result.copilotImage) console.log("Copilot image URL received:", result.copilotImage);
+        
+        if (result) {
+          // Force state update with the received sections, with fallbacks to prevent empty updates
+          setContent(prev => ({
+            news: result.news || prev.news,
+            markets: result.markets || prev.markets,
+            copilot: result.copilot || prev.copilot,
+          }));
           
-          if (sections.length === 3) {
-            toast.success("All newsletter sections generated successfully!");
-          } else if (sections.length > 0) {
-            toast.success(`Generated: ${sections.join(", ")}. Some sections may need regeneration.`);
+          // Update image URLs
+          setImageUrls(prev => ({
+            news: result.newsImage || prev.news,
+            markets: result.marketsImage || prev.markets,
+            copilot: result.copilotImage || prev.copilot,
+          }));
+          
+          // Check if any content was actually returned
+          if (result.news || result.markets || result.copilot) {
+            let sections = [];
+            if (result.news) sections.push("News");
+            if (result.markets) sections.push("Markets");
+            if (result.copilot) sections.push("Copilot");
+            
+            if (sections.length === 3) {
+              toast.success("All newsletter sections generated successfully!");
+            } else if (sections.length > 0) {
+              toast.success(`Generated: ${sections.join(", ")}. Some sections may need regeneration.`);
+            } else {
+              toast.warning("No content was returned. Please try again.");
+            }
           } else {
-            toast.warning("No content was returned. Please try again.");
+            toast.warning("No content was returned. Please try regenerating each section individually.");
           }
         } else {
-          toast.warning("No content was returned. Please try regenerating each section individually.");
+          toast.error("Failed to get response from API. Please try again.");
         }
-      } else {
-        toast.error("Failed to get response from API. Please try again.");
+      } catch (error) {
+        // Dismiss the loading toast
+        toast.dismiss(loadingToastId);
+        
+        console.error("Failed in generate all:", error);
+        
+        // If we haven't exceeded max retries, try again
+        if (retryCount < MAX_RETRIES) {
+          setRetryCount(prev => prev + 1);
+          toast.warning(`Connection issue detected. Retry attempt ${retryCount + 1}/${MAX_RETRIES}...`);
+          
+          // Wait a moment and retry
+          setTimeout(() => {
+            handleGenerateAll();
+          }, 2000);
+          return;
+        } else {
+          toast.error("Failed to generate newsletter after multiple attempts. Please try again later.");
+          setRetryCount(0);
+        }
       }
     } catch (error) {
       console.error("Failed to generate newsletter:", error);
@@ -283,8 +310,15 @@ const Index = () => {
         <div className="max-w-4xl mx-auto">
           {isWebhookProcessing && (
             <Announcement 
-              message="Your request is being processed. This may take up to 2 minutes. Please wait..." 
+              message="Your request is being processed. This may take up to 2.5 minutes. Please wait..." 
               type="info"
+            />
+          )}
+          
+          {retryCount > 0 && (
+            <Announcement 
+              message={`Connection issue detected. Retry attempt ${retryCount}/${MAX_RETRIES}...`} 
+              type="warning"
             />
           )}
           

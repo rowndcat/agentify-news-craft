@@ -7,7 +7,7 @@ export interface NewsletterSections {
   copilot: string;
 }
 
-// Function to generate the newsletter content with improved timeout and array handling
+// Function to generate the newsletter content with improved error handling and retries
 export const generateNewsletter = async (payload: { chatId: string; message: string }): Promise<any> => {
   try {
     console.log("Sending generateNewsletter request with payload:", payload);
@@ -17,15 +17,16 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
     
     // Create an AbortController for timeout management
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout (increased from 90s)
+    const timeoutId = setTimeout(() => controller.abort(), 150000); // 150 second timeout (increased from 120s)
     
     try {
-      // Make the API request with timeout
+      // Make the API request with timeout and mode: 'cors' explicitly set
       const response = await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        mode: 'cors',  // Explicitly set CORS mode
         body: JSON.stringify(payload),
         signal: controller.signal
       });
@@ -65,8 +66,15 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
       clearTimeout(timeoutId); // Clear the timeout on error too
       
       if (error.name === 'AbortError') {
-        console.error("Request timed out after 120 seconds");
-        throw new Error("Request timed out after 120 seconds. The webhook might be taking too long to respond.");
+        console.error("Request timed out after 150 seconds");
+        throw new Error("Request timed out after 150 seconds. The webhook might be taking too long to respond.");
+      }
+      
+      // For fetch errors like "Failed to fetch", add more detailed logging
+      if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+        console.error("Network error when calling webhook. This could be due to CORS, network connectivity, or the server being unavailable.");
+        // Try an alternative approach with no-cors mode as a fallback
+        return await fetchWithNoCors(payload);
       }
       
       throw error; // Re-throw all other errors
@@ -77,80 +85,38 @@ export const generateNewsletter = async (payload: { chatId: string; message: str
   }
 };
 
-// Extract sections from markdown formatted text - completely rewritten for better reliability
-function extractSectionsFromMarkdown(markdown: string): { news: string; markets: string; copilot: string; newsImage?: string; marketsImage?: string; copilotImage?: string } {
-  console.log("Extracting sections from markdown text:", markdown.substring(0, 100) + "...");
+// Fallback function that tries a no-cors approach (will still get opaque response)
+async function fetchWithNoCors(payload: { chatId: string; message: string }) {
+  console.log("Attempting fallback fetch with no-cors mode");
+  toast.info("Trying alternative connection method...");
   
-  const result = {
-    news: "",
-    markets: "",
-    copilot: "",
-    newsImage: null,
-    marketsImage: null,
-    copilotImage: null
-  };
-  
-  if (!markdown) {
-    console.error("Empty markdown received");
-    return result;
-  }
-
-  // Define patterns to find where each section begins
-  const patterns = {
-    news: /(?:##?\s*\*?\*?News\s*Section\*?\*?|##?\s*\*?\*?AI\s*News\*?\*?)/i,
-    markets: /(?:##?\s*\*?\*?Economy\s*&\s*Markets\s*Section\*?\*?|##?\s*\*?\*?Markets\s*&\s*Economy\*?\*?)/i,
-    copilot: /(?:##?\s*\*?\*?Copilot\s*Section\*?\*?|##?\s*\*?\*?AI\s*Copilot\*?\*?)/i
-  };
-
-  // Find each section in the markdown
-  const matches = {
-    news: markdown.match(patterns.news),
-    markets: markdown.match(patterns.markets),
-    copilot: markdown.match(patterns.copilot)
-  };
-
-  // Log what we've found
-  console.log("Section matches found:", {
-    news: matches.news ? matches.news[0] : "not found",
-    markets: matches.markets ? matches.markets[0] : "not found",
-    copilot: matches.copilot ? matches.copilot[0] : "not found"
-  });
-
-  // Get the indexes where each section starts
-  const indexes = {
-    news: matches.news ? matches.news.index : -1,
-    markets: matches.markets ? matches.markets.index : -1,
-    copilot: matches.copilot ? matches.copilot.index : -1
-  };
-
-  // Sort sections by their position in the text
-  const sections = [
-    { name: 'news', index: indexes.news },
-    { name: 'markets', index: indexes.markets },
-    { name: 'copilot', index: indexes.copilot }
-  ].filter(section => section.index !== -1)
-    .sort((a, b) => a.index - b.index);
-
-  console.log("Sorted sections by position:", sections.map(s => s.name));
-
-  // Extract each section based on its position relative to the next section
-  for (let i = 0; i < sections.length; i++) {
-    const currentSection = sections[i];
-    const nextSection = sections[i + 1];
+  try {
+    // Note: This will result in an "opaque" response that we can't read directly,
+    // but we can at least try to trigger the webhook processing
+    await fetch("https://agentify360.app.n8n.cloud/webhook/7dc2bc76-937c-439d-ab71-d1c2b496facb/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      mode: 'no-cors', // This will make the request succeed even with CORS issues
+      body: JSON.stringify(payload),
+    });
     
-    const startIndex = currentSection.index;
-    const endIndex = nextSection ? nextSection.index : markdown.length;
+    // Since we can't read the response with no-cors, wait a bit then use mock data
+    // to simulate a response (this is just for development/debugging)
+    toast.warning("Using backup data source as webhook is unreachable");
+    console.log("Using mock newsletter data since no-cors response can't be read");
     
-    if (startIndex !== -1 && startIndex < endIndex) {
-      const content = markdown.substring(startIndex, endIndex).trim();
-      result[currentSection.name] = content;
-      
-      console.log(`Extracted ${currentSection.name} section (${content.length} chars)`);
-      console.log(`${currentSection.name} preview:`, content.substring(0, 50) + "...");
-    }
+    // Return mock data structure that matches expected format
+    return {
+      news: "## **News Section**\n**Connection issues detected**\nThe API is currently unavailable. This is placeholder content until connectivity is restored.\n\nPlease try again later.",
+      markets: "## **Economy & Markets Section**\n**Connection issues detected**\nThe API is currently unavailable. This is placeholder content until connectivity is restored.",
+      copilot: "## **Copilot Section**\n**Connection issues detected**\nThe API is currently unavailable. This is placeholder content until connectivity is restored."
+    };
+  } catch (error) {
+    console.error("Even no-cors fallback failed:", error);
+    throw new Error("All connection attempts to the webhook failed. Please check your network connection and try again later.");
   }
-
-  return result;
 }
 
 // Function to regenerate a specific section with improved timeout
